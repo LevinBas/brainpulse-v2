@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrainPulse – Trivia, Time Attack, Flags & World Map</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <!-- OBEN: Logo, Modus-Navigation & Sprachumschalter -->
+    <header class="topbar">
+      <div class="topbar-row">
+        <div class="logo" onclick="goHome()">🧠 Brain<span>Pulse</span></div>
+        <div class="lang-switch">
+          <button class="lang-btn active" id="btn-en" onclick="setLanguage('en')">EN</button>
+          <button class="lang-btn" id="btn-de" onclick="setLanguage('de')">DE</button>
+        </div>
+      </div>
+
+      <nav class="mode-nav" id="mode-nav">
+        <button class="nav-tab active" data-mode="classic" onclick="switchMode('classic')" id="tab-classic">🎯 Classic Quiz</button>
+        <button class="nav-tab" data-mode="timed" onclick="switchMode('timed')" id="tab-timed">⚡ Time Attack</button>
+        <button class="nav-tab" data-mode="flags" onclick="switchMode('flags')" id="tab-flags">🚩 Flag Quiz</button>
+        <button class="nav-tab" data-mode="map" onclick="switchMode('map')" id="tab-map">🗺️ Spot the Country</button>
+      </nav>
+    </header>
+
+    <!-- STARTBILDSCHIRM -->
+    <main class="panel" id="screen-home">
+      <h1 id="ui-home-title">Test Your General Knowledge</h1>
+      <p class="subtitle" id="ui-home-sub">Choose your category, difficulty, and round length.</p>
+
+      <div id="category-section">
+        <span class="section-label" id="ui-cat-label">1. Select Category</span>
+        <div class="category-grid" id="category-grid"></div>
+      </div>
+
+      <span class="section-label" id="ui-diff-label">2. Select Difficulty</span>
+      <div class="pill-row" id="diff-row"></div>
+
+      <span class="section-label" id="ui-len-label">3. Questions per Round</span>
+      <div class="pill-row" id="len-row"></div>
+
+      <div class="warning-box hidden" id="empty-warning"></div>
+
+      <button class="primary-btn" id="btn-start" onclick="startQuiz()">Start Quiz</button>
+    </main>
+
+    <!-- SPIELBILDSCHIRM -->
+    <section class="panel hidden" id="screen-quiz">
+      <div class="quiz-top">
+        <span id="ui-q-counter">Question 1 / 10</span>
+        <div class="badges">
+          <span class="badge streak" id="ui-streak">🔥 0</span>
+          <span class="badge" id="ui-score">0 pts</span>
+        </div>
+      </div>
+
+      <!-- Fortschrittsbalken -->
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+
+      <!-- Countdown-Leiste (nur im Time Attack Modus) -->
+      <div class="timer-wrap hidden" id="timer-wrap">
+        <div class="timer-header">
+          <span id="ui-timer-label">⏱️ Time left</span>
+          <span id="ui-timer-sec">15.0s</span>
+        </div>
+        <div class="timer-bar">
+          <div class="timer-fill" id="timer-fill"></div>
+        </div>
+      </div>
+
+      <div class="question-meta" id="q-meta">GENERAL KNOWLEDGE • MEDIUM</div>
+      <div class="question-text" id="q-text">Question goes here</div>
+
+      <!-- Flaggen-Bild (nur im Flag Quiz) -->
+      <div class="flag-box hidden" id="flag-box">
+        <img id="flag-img" src="" alt="Country Flag" />
+      </div>
+
+      <!-- Interaktive Weltkarte (nur im Spot the Country Modus) -->
+      <div class="map-wrapper hidden" id="map-wrapper">
+        <div class="map-controls">
+          <button type="button" onclick="zoomMap(1.6)" title="Zoom In">+</button>
+          <button type="button" onclick="zoomMap(0.625)" title="Zoom Out">−</button>
+          <button type="button" onclick="resetMapZoom()" id="btn-map-reset">Reset</button>
+        </div>
+        <div class="map-loading" id="map-loading">Loading world map...</div>
+        <svg id="world-map" viewBox="0 0 960 500"></svg>
+        <div class="map-hint" id="ui-map-hint">Scroll or use +/− to zoom, drag to pan, click a country to answer.</div>
+      </div>
+
+      <!-- Multiple-Choice-Antworten -->
+      <div class="options-list" id="options-list"></div>
+
+      <div class="explanation-box" id="explanation-box"></div>
+
+      <div class="next-wrap" id="next-wrap">
+        <button class="primary-btn" id="btn-next" onclick="nextQuestion()">Next Question →</button>
+      </div>
+    </section>
+
+    <!-- ERGEBNISBILDSCHIRM -->
+    <section class="panel result-box hidden" id="screen-result">
+      <h1 id="ui-res-title">Quiz Complete!</h1>
+      <div class="score-circle" id="res-score">8 / 10</div>
+      <div class="points-pill" id="res-points">800 Points</div>
+      <div class="result-rank" id="res-rank">Trivia Master</div>
+      <p class="result-sub" id="res-sub">You answered 80% of the questions correctly.</p>
+
+      <div class="result-actions">
+        <button class="secondary-btn" id="btn-share" onclick="shareResult()">📋 Copy Result to Share</button>
+        <button class="primary-btn" id="btn-restart" onclick="goHome()">Play Again</button>
+      </div>
+    </section>
+
+    <!-- FOOTER (Rechtliches / Impressum) -->
+    <footer class="footer">
+      <span>© 2026 BrainPulse</span>
+      <div class="footer-links">
+        <button onclick="openLegal('imprint')" id="link-imprint">Legal Notice / Impressum</button>
+        <span>•</span>
+        <button onclick="openLegal('privacy')" id="link-privacy">Privacy / Datenschutz</button>
+      </div>
+    </footer>
+  </div>
+
+  <!-- MODAL FÜR IMPRESSUM & DATENSCHUTZ -->
+  <div class="modal-backdrop hidden" id="legal-modal" onclick="closeLegal(event)">
+    <div class="modal-card" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <h2 id="modal-title">Impressum</h2>
+        <button class="close-btn" onclick="closeLegal()">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Karten-Bibliotheken + deine Datendateien -->
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+  <script src="questions.js"></script>
+  <script src="flags.js"></script>
+  <script src="countries.js"></script>
+  <script src="app.js"></script>
+  <script src="fragen-popkultur.js"></script>
+  <script src="fragen-sport.js"></script>
+  <script src="fragen-geographie-100.js"></script>
+  <script src="fragen-geschichte-100.js"></script>
+  <script src="fragen-allgemein-100.js"></script>
+  <script src="fragen-wissenschaft-100.js"></script>
+</body>>
+</html>
