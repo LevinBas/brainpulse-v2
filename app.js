@@ -52,6 +52,259 @@ function addQuestions(newList) {
 }
 
 // =========================================================================
+// 1B. FORTSCHRITT, ATLAS, DAILY SEED & STREAK-KALENDER (LOCALSTORAGE)
+// =========================================================================
+const STORAGE_KEY = "brainpulse_progress_v1";
+
+function getTodaySeedStr() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function createSeededRng(seedStr) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < seedStr.length; i++) {
+    h ^= seedStr.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return function () {
+    h += 0x6d2b79f5;
+    let t = Math.imul(h ^ (h >>> 15), 1 | h);
+    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function seededShuffle(list, rng) {
+  const arr = [...list];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function getDefaultProgress() {
+  return {
+    atlas: {
+      countries: {},   // id -> { seen, mastered, misses, lastDate }
+      flags: {},       // code -> { seen, mastered, misses, lastDate }
+      categories: {}   // catId -> { seen, mastered, misses, lastDate }
+    },
+    modes: {},         // modeId -> { bestScore, bestStreak, plays }
+    calendar: {
+      activeDays: [],  // ["2026-11-18", "2026-11-19"]
+      dailyCompleted: {} // { "2026-11-19": { score, correct, total } }
+    }
+  };
+}
+
+function loadProgress() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return getDefaultProgress();
+    const parsed = JSON.parse(raw);
+    const def = getDefaultProgress();
+    return {
+      atlas: {
+        countries: parsed?.atlas?.countries || {},
+        flags: parsed?.atlas?.flags || {},
+        categories: parsed?.atlas?.categories || {}
+      },
+      modes: parsed?.modes || {},
+      calendar: {
+        activeDays: Array.isArray(parsed?.calendar?.activeDays) ? parsed.calendar.activeDays : [],
+        dailyCompleted: parsed?.calendar?.dailyCompleted || {}
+      }
+    };
+  } catch (e) {
+    return getDefaultProgress();
+  }
+}
+
+let userProgress = loadProgress();
+
+function saveProgress() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(userProgress));
+  } catch (e) {}
+}
+
+function recordAtlasOutcome(bucketName, key, isSuccess) {
+  if (!key) return;
+  const bucket = userProgress.atlas[bucketName];
+  if (!bucket) return;
+  const today = getTodaySeedStr();
+  const entry = bucket[key] || { seen: 0, mastered: false, misses: 0, lastDate: today };
+  entry.seen += 1;
+  entry.lastDate = today;
+  if (isSuccess) {
+    entry.mastered = true;
+    entry.misses = Math.max(0, entry.misses - 1);
+  } else {
+    entry.misses += 1;
+  }
+  bucket[key] = entry;
+  saveProgress();
+}
+
+function recordItemAtlas(item, isSuccess) {
+  if (!item) return;
+  if (item.category) recordAtlasOutcome("categories", item.category, isSuccess);
+  if (item.isHol && item.subType) recordAtlasOutcome("categories", item.subType, isSuccess);
+  if (item.isChrono) recordAtlasOutcome("categories", "inventions", isSuccess);
+
+  if (item.code && (item.isFlag || item.isFlagZoom || item.isDossier)) {
+    recordAtlasOutcome("flags", item.code.toLowerCase(), isSuccess);
+  }
+  if (item.countryId) {
+    recordAtlasOutcome("countries", String(item.countryId).padStart(3, "0"), isSuccess);
+  }
+  if (item.startId) recordAtlasOutcome("countries", String(item.startId).padStart(3, "0"), isSuccess);
+  if (item.endId) recordAtlasOutcome("countries", String(item.endId).padStart(3, "0"), isSuccess);
+}
+
+function recordModeRunStats(modeId, score, bestRunStreak, isDaily = false, dailySummary = null) {
+  const today = getTodaySeedStr();
+  if (!userProgress.calendar.activeDays.includes(today)) {
+    userProgress.calendar.activeDays.push(today);
+    userProgress.calendar.activeDays.sort();
+  }
+
+  const mStat = userProgress.modes[modeId] || { bestScore: 0, bestStreak: 0, plays: 0 };
+  mStat.plays += 1;
+  if (score > mStat.bestScore) mStat.bestScore = score;
+  if (bestRunStreak > mStat.bestStreak) mStat.bestStreak = bestRunStreak;
+  userProgress.modes[modeId] = mStat;
+
+  if (isDaily && dailySummary) {
+    const prevDaily = userProgress.calendar.dailyCompleted[today];
+    if (!prevDaily || score > prevDaily.score) {
+      userProgress.calendar.dailyCompleted[today] = dailySummary;
+    }
+  }
+
+  saveProgress();
+}
+
+function computeCalendarStreaks() {
+  const days = new Set(userProgress.calendar.activeDays || []);
+  const now = new Date();
+  const toIso = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+
+  let currentStreak = 0;
+  let cursor = new Date(now);
+  if (!days.has(toIso(cursor))) {
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  while (days.has(toIso(cursor))) {
+    currentStreak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  const sorted = [...days].sort();
+  let longestStreak = 0;
+  let run = 0;
+  let prevTime = null;
+  for (const dStr of sorted) {
+    const [y, m, d] = dStr.split("-").map(Number);
+    const t = new Date(y, m - 1, d).getTime();
+    if (prevTime !== null && Math.round((t - prevTime) / 86400000) === 1) {
+      run += 1;
+    } else {
+      run = 1;
+    }
+    if (run > longestStreak) longestStreak = run;
+    prevTime = t;
+  }
+
+  return { currentStreak, longestStreak, totalDays: days.size };
+}
+
+function getWeaknessCounts() {
+  const countryWeakIds = Object.entries(userProgress.atlas.countries || {})
+    .filter(([, v]) => (v.misses || 0) > 0 && !v.mastered)
+    .map(([k]) => k);
+
+  const flagWeakCodes = Object.entries(userProgress.atlas.flags || {})
+    .filter(([, v]) => (v.misses || 0) > 0 && !v.mastered)
+    .map(([k]) => k);
+
+  const catWeakIds = Object.entries(userProgress.atlas.categories || {})
+    .filter(([, v]) => (v.misses || 0) > 0 && !v.mastered)
+    .map(([k]) => k);
+
+  return {
+    countries: countryWeakIds,
+    flags: flagWeakCodes,
+    categories: catWeakIds,
+    total: countryWeakIds.length + flagWeakCodes.length + catWeakIds.length
+  };
+}
+
+function buildWeaknessQuestions() {
+  const weak = getWeaknessCounts();
+  const questions = [];
+
+  if (weak.countries.length > 0) {
+    const allCountries = getAllCountries195();
+    weak.countries.forEach(cid => {
+      const c = allCountries.find(item => item.id === cid);
+      if (c) questions.push(buildMapQuestion(c));
+    });
+  }
+
+  if (weak.flags.length > 0 && typeof FLAGS_DATA !== "undefined") {
+    weak.flags.forEach(code => {
+      const f = FLAGS_DATA.find(item => item.code.toLowerCase() === code);
+      if (f) questions.push(buildFlagQuestion(f));
+    });
+  }
+
+  if (weak.categories.length > 0 && typeof QUIZ_DATA !== "undefined") {
+    const catMatches = QUIZ_DATA.filter(q => weak.categories.includes(q.category)).slice(0, 8);
+    questions.push(...catMatches);
+  }
+
+  return questions.sort(() => Math.random() - 0.5).slice(0, 15);
+}
+
+function buildDailySeedQuestions(seedStr) {
+  const rng = createSeededRng(seedStr);
+  const pool = [];
+
+  if (typeof QUIZ_DATA !== "undefined" && QUIZ_DATA.length > 0) {
+    seededShuffle(QUIZ_DATA, rng).slice(0, 4).forEach(q => pool.push(q));
+  }
+  if (typeof FLAGS_DATA !== "undefined" && FLAGS_DATA.length >= 4) {
+    seededShuffle(FLAGS_DATA, rng).slice(0, 3).forEach(f => {
+      const others = seededShuffle(FLAGS_DATA.filter(x => x.code !== f.code), rng).slice(0, 3);
+      const choices = seededShuffle([f, ...others], rng);
+      pool.push({
+        isFlag: true,
+        code: f.code,
+        difficulty: f.difficulty,
+        choices,
+        answer: choices.findIndex(c => c.code === f.code),
+        en: { fact: f.factEn },
+        de: { fact: f.factDe }
+      });
+    });
+  }
+  const allCountries = getAllCountries195();
+  if (allCountries.length > 0) {
+    seededShuffle(allCountries, rng).slice(0, 3).forEach(c => {
+      pool.push(buildMapQuestion(c));
+    });
+  }
+
+  return seededShuffle(pool, rng).slice(0, 10);
+}
+
+// =========================================================================
 // 2. ÜBERSETZUNGEN (ENGLISCH & DEUTSCH)
 // =========================================================================
 const UI_STRINGS = {
@@ -148,6 +401,26 @@ const UI_STRINGS = {
         sub: "Estimate the flight distance between two world cities, then watch D3 draw the true curved orthodrome route!"
       }
     },
+    // Meta-Features (Atlas, Daily Seed, Streak Calendar)
+    dailyBtn: (seed) => `📅 Daily Challenge (${seed})`,
+    dailyDoneBadge: "✓ Done Today",
+    dailyMetaLabel: (seed) => `📅 Daily Challenge • ${seed}`,
+    weaknessBtn: (cnt) => cnt > 0 ? `🎯 Practice Mistakes (${cnt})` : "🎯 Practice Mistakes (0)",
+    atlasModalBtn: "📊 Personal Atlas & Records",
+    atlasModalTitle: "Personal Atlas, Records & Streak Calendar",
+    atlasCountriesLabel: "Countries Mastered",
+    atlasFlagsLabel: "Flags Mastered",
+    atlasCatsLabel: "Topics Mastered",
+    streakCurrentLabel: "Day Streak",
+    streakBestLabel: "Best Streak",
+    activeDaysLabel: "Active Days",
+    modeRecordsTitle: "Best Score & Streak per Mode",
+    calendarTitle: "Streak Calendar (Last 28 Days)",
+    resetProgressBtn: "Reset Local Progress",
+    resetConfirm: "Reset all saved progress, records, and calendar days?",
+    statusUnknown: "Unknown",
+    statusSeen: "Seen",
+    statusMastered: "Mastered",
     catLabel: "1. Select Category",
     holCatLabel: "1. Select Duel Type",
     pinCatLabel: "1. Select City Type",
@@ -174,13 +447,11 @@ const UI_STRINGS = {
     radarHint: "Click anywhere to send a thermal radar ping (Ice Blue > 5,000 km → Red < 600 km → Hit ≤ 250 km).",
     borderHint: "Click a glowing neighboring country to advance your overland route!",
     flightHint: "Use the slider below to estimate the great-circle distance between the two cities.",
-    // Chrono-Chain
     chronoPrompt: "Where on the timeline does this invention belong?",
     chronoInsertHere: "➕ Insert here",
     chronoWrongSlot: (yearStr) => `❌ Wrong slot! It dates to ${yearStr} — placed in its true spot.`,
     chronoRightSlot: (yearStr, pts) => `✅ Spot on (${yearStr})! +${pts} pts`,
     chronoGameOver: (chainLen, pts) => `💔 Out of lives! Your Chrono-Chain reached ${chainLen} cards (${pts} pts).`,
-    // Border Route
     borderPrompt: (from, to) => `Travel overland: ${from} → ${to}`,
     borderHud: (steps, par) => `Steps taken: ${steps} • Shortest Par: ${par}`,
     borderUndo: "↩️ Undo Step",
@@ -188,13 +459,10 @@ const UI_STRINGS = {
     borderWinMsg: (steps, par, pts) => steps <= par
       ? `🏆 Perfect Par Route (${steps}/${par} borders)! +${pts} pts!`
       : `🎯 Destination reached in ${steps} steps (Par: ${par}) — +${pts} pts!`,
-    // Flag Zoom
     flagZoomPrompt: "Hit the buzzer as soon as you recognize this flag!",
     flagZoomBuzzer: (pts) => `🚨 BUZZER! Lock in (${pts} pts)`,
     flagZoomNowPick: (pts) => `🔒 Locked at ${pts} pts — pick the right country!`,
-    // Missing Neighbor
     missingPrompt: "Which country is missing from the center of this map?",
-    // 4-Clue Dossier
     dossierPrompt: "Which mystery country matches this dossier?",
     dossierRevealBtn: (nextPts) => `🔓 Reveal Next Clue (drops to ${nextPts} pts)`,
     dossierMaxClues: "All 4 clues revealed",
@@ -211,12 +479,10 @@ const UI_STRINGS = {
     dossierCapText: (cap) => `Capital city: ${cap}`,
     dossierWinMsg: (pts, name) => `🕵️ Case solved for +${pts} pts! It is ${name}.`,
     dossierLoseMsg: (name) => `❌ Wrong guess! The mystery country was ${name}.`,
-    // Flight Estimator
     flightPrompt: (c1, c2) => `Great-circle distance: ${c1} ✈️ ${c2}`,
     flightLockBtn: (kmStr) => `✈️ Lock in Estimate (${kmStr})`,
     flightResultMsg: (guessStr, actualStr, errPct, pts) =>
       `✈️ Actual: ${actualStr} (Your guess: ${guessStr}, ${errPct}% off) — +${pts} pts!`,
-    // Shared
     radarReady: "📡 Radar ready — click anywhere on the map for Ping #1!",
     radarPingsLeft: (rem, max) => `Pings left: ${rem} / ${max}`,
     radarZones: {
@@ -274,19 +540,17 @@ const UI_STRINGS = {
     shareCopied: "✅ Copied to Clipboard!",
     restartBtn: "Back to Menu",
     ranks: ["Keep Practicing!", "Solid Start!", "Trivia Pro!", "Grandmaster!"],
-    legal: {
+   legal: {
       imprintTitle: "Legal Notice / Impressum",
       imprintBody: `
         <p><strong>Information pursuant to § 5 DDG (Germany):</strong></p>
-        <p>[Your First & Last Name]<br>[Street & House Number]<br>[Postal Code & City], Germany</p>
-        <p><strong>Contact:</strong><br>Email: [your-email@example.com]</p>
-        <p><em>Note: Replace these placeholders with your own contact details before publishing your website online.</em></p>
+        <p>Levin Bastians<br>Jettbergskamp 10b<br>22397 Hamburg, Germany</p>
+        <p><strong>Contact:</strong><br>Email: marklevin.bastians@gmail.com</p>
       `,
       privacyTitle: "Privacy Policy / Datenschutzerklärung",
       privacyBody: `
         <p><strong>1. General Information</strong><br>This quiz website runs directly in your browser. We do not require user accounts or store personal profiles on external servers.</p>
         <p><strong>2. External Content (Maps & Flag Images)</strong><br>Flag images are loaded via FlagCDN (flagcdn.com) and world map vector data via jsDelivr (cdn.jsdelivr.net). Technically, your IP address is transmitted to deliver these files.</p>
-        <p><em>Note: Add Google AdSense or analytics disclosures here if you enable ads later.</em></p>
       `
     }
   },
@@ -383,6 +647,26 @@ const UI_STRINGS = {
         sub: "Schätze die Luftlinie zwischen zwei Weltstädten per Regler – danach zeichnet D3 die gekrümmte Flugroute über den Globus!"
       }
     },
+    // Meta-Features (Atlas, Daily Seed, Streak Calendar)
+    dailyBtn: (seed) => `📅 Tages-Challenge (${seed})`,
+    dailyDoneBadge: "✓ Heute erledigt",
+    dailyMetaLabel: (seed) => `📅 Tages-Challenge • ${seed}`,
+    weaknessBtn: (cnt) => cnt > 0 ? `🎯 Fehlschüsse üben (${cnt})` : "🎯 Fehlschüsse üben (0)",
+    atlasModalBtn: "📊 Atlas, Rekorde & Kalender",
+    atlasModalTitle: "Persönlicher Atlas, Bestleistungen & Streak-Kalender",
+    atlasCountriesLabel: "Länder gemeistert",
+    atlasFlagsLabel: "Flaggen gemeistert",
+    atlasCatsLabel: "Themen gemeistert",
+    streakCurrentLabel: "Aktuelle Serie",
+    streakBestLabel: "Beste Serie",
+    activeDaysLabel: "Aktive Tage",
+    modeRecordsTitle: "Highscore & Beste Serie pro Modus",
+    calendarTitle: "Streak-Kalender (Letzte 28 Tage)",
+    resetProgressBtn: "Lokalen Fortschritt zurücksetzen",
+    resetConfirm: "Gespeicherten Fortschritt, Rekorde und Kalenderdaten wirklich löschen?",
+    statusUnknown: "Unbekannt",
+    statusSeen: "Gesehen",
+    statusMastered: "Gemeistert",
     catLabel: "1. Kategorie wählen",
     holCatLabel: "1. Duell-Art wählen",
     pinCatLabel: "1. Städte-Auswahl",
@@ -409,13 +693,11 @@ const UI_STRINGS = {
     radarHint: "Klicke auf die Karte für einen Radar-Ping (Eisblau > 5.000 km → Glutrot < 600 km → Treffer ≤ 250 km).",
     borderHint: "Klicke auf ein angrenzendes Nachbarland, um deine Route fortzusetzen!",
     flightHint: "Nutze den Schieberegler unten, um die Luftlinie zwischen beiden Städten zu schätzen.",
-    // Chrono-Chain
     chronoPrompt: "In welche Lücke des Zeitstrahls gehört diese Erfindung?",
     chronoInsertHere: "➕ Hier einfügen",
     chronoWrongSlot: (yearStr) => `❌ Falsche Lücke! Datierung: ${yearStr} – an der richtigen Stelle einsortiert.`,
     chronoRightSlot: (yearStr, pts) => `✅ Exakt einsortiert (${yearStr})! +${pts} Pkt.`,
     chronoGameOver: (chainLen, pts) => `💔 Alle 3 Leben verbraucht! Dein Zeitstrahl hat ${chainLen} Karten erreicht (${pts} Pkt.).`,
-    // Border Route
     borderPrompt: (from, to) => `Reise auf dem Landweg: ${from} → ${to}`,
     borderHud: (steps, par) => `Bisherige Schritte: ${steps} • Kürzester Par-Wert: ${par}`,
     borderUndo: "↩️ Schritt zurück",
@@ -423,13 +705,10 @@ const UI_STRINGS = {
     borderWinMsg: (steps, par, pts) => steps <= par
       ? `🏆 Perfekte Par-Route (${steps}/${par} Grenzen)! +${pts} Pkt.!`
       : `🎯 Ziel in ${steps} Schritten erreicht (Par: ${par}) — +${pts} Pkt.!`,
-    // Flag Zoom
     flagZoomPrompt: "Drücke den Buzzer, sobald du die Flagge erkennst!",
     flagZoomBuzzer: (pts) => `🚨 BUZZER! Einloggen (${pts} Pkt.)`,
     flagZoomNowPick: (pts) => `🔒 Eingeloggt bei ${pts} Pkt. — wähle das richtige Land!`,
-    // Missing Neighbor
     missingPrompt: "Welches Land fehlt in der Mitte dieses Kartenausschnitts?",
-    // 4-Clue Dossier
     dossierPrompt: "Welches geheimnisvolle Land verbirgt sich hinter diesem Steckbrief?",
     dossierRevealBtn: (nextPts) => `🔓 Nächsten Hinweis aufdecken (sinkt auf ${nextPts} Pkt.)`,
     dossierMaxClues: "Alle 4 Hinweise aufgedeckt",
@@ -446,12 +725,10 @@ const UI_STRINGS = {
     dossierCapText: (cap) => `Hauptstadt: ${cap}`,
     dossierWinMsg: (pts, name) => `🕵️ Fall gelöst für +${pts} Pkt.! Gesucht war ${name}.`,
     dossierLoseMsg: (name) => `❌ Leider daneben! Das gesuchte Land war ${name}.`,
-    // Flight Estimator
     flightPrompt: (c1, c2) => `Luftlinie schätzen: ${c1} ✈️ ${c2}`,
     flightLockBtn: (kmStr) => `✈️ Schätzung einloggen (${kmStr})`,
     flightResultMsg: (guessStr, actualStr, errPct, pts) =>
       `✈️ Echte Luftlinie: ${actualStr} (Dein Tipp: ${guessStr}, ${errPct}% Abweichung) — +${pts} Pkt.!`,
-    // Shared
     radarReady: "📡 Radar bereit — klicke auf die Karte für Ping #1!",
     radarPingsLeft: (rem, max) => `Verbleibende Pings: ${rem} / ${max}`,
     radarZones: {
@@ -508,20 +785,18 @@ const UI_STRINGS = {
     shareBtn: "📋 Ergebnis zum Teilen kopieren",
     shareCopied: "✅ In die Zwischenablage kopiert!",
     restartBtn: "Zurück zur Auswahl",
-    ranks: ["Weiter üben!", "Solider Start!", "Quiz-Profi!", "Großmeister!"],
+ranks: ["Weiter üben!", "Solider Start!", "Quiz-Profi!", "Großmeister!"],
     legal: {
       imprintTitle: "Impressum",
       imprintBody: `
         <p><strong>Angaben gemäß § 5 DDG:</strong></p>
-        <p>[Dein Vor- und Nachname]<br>[Straße und Hausnummer]<br>[PLZ und Ort]</p>
-        <p><strong>Kontakt:</strong><br>E-Mail: [deine-email@beispiel.de]</p>
-        <p><em>Hinweis: Trage hier deine echten Daten ein, bevor du die Seite öffentlich ins Netz stellst.</em></p>
+        <p>Levin Bastians<br>Jettbergskamp 10b<br>22397 Hamburg, Deutschland</p>
+        <p><strong>Kontakt:</strong><br>E-Mail: marklevin.bastians@gmail.com</p>
       `,
       privacyTitle: "Datenschutzerklärung",
       privacyBody: `
         <p><strong>1. Datenschutz auf einen Blick</strong><br>Dieses Quiz läuft lokal in deinem Browser. Es werden keine Benutzerkonten oder Spielstände auf eigenen Servern gespeichert.</p>
         <p><strong>2. Einbindung von Karten- & Flaggen-Daten</strong><br>Flaggenbilder werden über FlagCDN (flagcdn.com) und Weltkarten-Vektordaten über jsDelivr (cdn.jsdelivr.net) geladen. Dabei wird technisch bedingt deine IP-Adresse an diese Server übermittelt.</p>
-        <p><em>Hinweis: Falls du später Werbung (z. B. Google AdSense) einbindest, ergänze diesen Text entsprechend.</em></p>
       `
     }
   }
@@ -548,6 +823,10 @@ let currentIndex = 0;
 let correctCount = 0;
 let totalPoints = 0;
 let streak = 0;
+let bestRunStreak = 0;
+let isDailySession = false;
+let dailySeedValue = null;
+let isWeaknessSession = false;
 let answered = false;
 let lastStatusHtml = "";
 
@@ -563,7 +842,7 @@ let flagZoomAnimId = null;
 // Weltkarten-, Nachbarschafts- & Geometrie-Variablen
 let worldAtlasData = null;
 let mapFeatures = [];
-let countryNeighborsMap = {}; // id -> Set(neighborIds)
+let countryNeighborsMap = {};
 let mapInitialized = false;
 let mapSvg = null;
 let mapG = null;
@@ -583,6 +862,125 @@ function stopTimer() {
     cancelAnimationFrame(flagZoomAnimId);
     flagZoomAnimId = null;
   }
+}
+
+function injectMetaFeatureStyles() {
+  if (document.getElementById("meta-feature-styles")) return;
+  const style = document.createElement("style");
+  style.id = "meta-feature-styles";
+  style.textContent = `
+    .meta-actions-bar {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+    @media (max-width: 640px) {
+      .meta-actions-bar {
+        grid-template-columns: 1fr;
+      }
+    }
+    .meta-action-btn {
+      background: #1e293b;
+      border: 1.5px solid #334155;
+      color: #f8fafc;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.16s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .meta-action-btn:hover:not(:disabled) {
+      border-color: #38bdf8;
+      background: #263449;
+      transform: translateY(-1px);
+    }
+    .meta-action-btn:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+    .meta-action-btn.daily-done {
+      border-color: #22c55e;
+      color: #4ade80;
+    }
+    .atlas-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .atlas-stat-box {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 10px 12px;
+      text-align: center;
+    }
+    .atlas-stat-num {
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: #38bdf8;
+    }
+    .atlas-stat-lbl {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+    .streak-cal-grid {
+      display: grid;
+      grid-template-columns: repeat(14, 1fr);
+      gap: 5px;
+      margin: 10px 0 18px;
+    }
+    .streak-day-cell {
+      height: 22px;
+      border-radius: 5px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.65rem;
+      color: #64748b;
+    }
+    .streak-day-cell.active {
+      background: rgba(34, 197, 94, 0.28);
+      border-color: #22c55e;
+      color: #4ade80;
+      font-weight: 800;
+    }
+    .streak-day-cell.daily {
+      box-shadow: inset 0 0 0 1px #38bdf8;
+    }
+    .mode-records-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 580px) {
+      .mode-records-list {
+        grid-template-columns: 1fr;
+      }
+    }
+    .mode-record-row {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 8px 11px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.82rem;
+    }
+  `;
+  document.head.appendChild(style);
 }
 
 function injectHybridNavStyles() {
@@ -956,6 +1354,135 @@ function getPool() {
   });
 }
 
+function renderMetaActionsBar() {
+  injectMetaFeatureStyles();
+  const t = UI_STRINGS[currentLang];
+  const startBtn = document.getElementById("btn-start");
+  if (!startBtn || !startBtn.parentElement) return;
+
+  let bar = document.getElementById("meta-actions-bar");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "meta-actions-bar";
+    bar.className = "meta-actions-bar";
+    startBtn.parentElement.insertBefore(bar, startBtn.nextSibling);
+  }
+
+  const todaySeed = getTodaySeedStr();
+  const dailyDone = Boolean(userProgress.calendar.dailyCompleted?.[todaySeed]);
+  const weak = getWeaknessCounts();
+
+  bar.innerHTML = `
+    <button class="meta-action-btn${dailyDone ? " daily-done" : ""}" onclick="startDailyChallenge()">
+      <span>${t.dailyBtn(todaySeed)}</span>
+      ${dailyDone ? `<span>(${t.dailyDoneBadge})</span>` : ""}
+    </button>
+    <button class="meta-action-btn" ${weak.total > 0 ? "" : "disabled"} onclick="startWeaknessTraining()">
+      <span>${t.weaknessBtn(weak.total)}</span>
+    </button>
+    <button class="meta-action-btn" onclick="openAtlasModal()">
+      <span>${t.atlasModalBtn}</span>
+    </button>
+  `;
+}
+
+function openAtlasModal() {
+  injectMetaFeatureStyles();
+  const t = UI_STRINGS[currentLang];
+
+  const allCountries = getAllCountries195();
+  const allFlags = typeof FLAGS_DATA !== "undefined" ? FLAGS_DATA : [];
+  const mainCats = CATEGORIES.filter(c => c.id !== "all");
+
+  const masteredCountries = Object.values(userProgress.atlas.countries || {}).filter(v => v.mastered).length;
+  const masteredFlags = Object.values(userProgress.atlas.flags || {}).filter(v => v.mastered).length;
+  const masteredCats = mainCats.filter(c => userProgress.atlas.categories?.[c.id]?.mastered).length;
+
+  const streaks = computeCalendarStreaks();
+
+  // Letzte 28 Tage für Streak-Kalender
+  const activeSet = new Set(userProgress.calendar.activeDays || []);
+  const dailySet = new Set(Object.keys(userProgress.calendar.dailyCompleted || {}));
+  const now = new Date();
+  let calCells = "";
+  for (let i = 27; i >= 0; i--) {
+    const dt = new Date(now);
+    dt.setDate(now.getDate() - i);
+    const iso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+    const isAct = activeSet.has(iso);
+    const isDly = dailySet.has(iso);
+    const cls = `streak-day-cell${isAct ? " active" : ""}${isDly ? " daily" : ""}`;
+    calCells += `<div class="${cls}" title="${iso}">${dt.getDate()}</div>`;
+  }
+
+  // Bestleistungen pro Modus
+  const modeIds = Object.keys(t.tabs);
+  const modeRows = modeIds.map(mId => {
+    const rec = userProgress.modes?.[mId] || { bestScore: 0, bestStreak: 0 };
+    return `
+      <div class="mode-record-row">
+        <span>${t.tabs[mId]}</span>
+        <strong style="color:#38bdf8;">${rec.bestScore} Pkt. • 🔥 ${rec.bestStreak}</strong>
+      </div>
+    `;
+  }).join("");
+
+  const html = `
+    <div class="atlas-summary-grid">
+      <div class="atlas-stat-box">
+        <div class="atlas-stat-num">${masteredCountries} / ${allCountries.length || 195}</div>
+        <div class="atlas-stat-lbl">${t.atlasCountriesLabel}</div>
+      </div>
+      <div class="atlas-stat-box">
+        <div class="atlas-stat-num">${masteredFlags} / ${allFlags.length || 0}</div>
+        <div class="atlas-stat-lbl">${t.atlasFlagsLabel}</div>
+      </div>
+      <div class="atlas-stat-box">
+        <div class="atlas-stat-num">${masteredCats} / ${mainCats.length}</div>
+        <div class="atlas-stat-lbl">${t.atlasCatsLabel}</div>
+      </div>
+    </div>
+
+    <div class="atlas-summary-grid">
+      <div class="atlas-stat-box">
+        <div class="atlas-stat-num">🔥 ${streaks.currentStreak}</div>
+        <div class="atlas-stat-lbl">${t.streakCurrentLabel}</div>
+      </div>
+      <div class="atlas-stat-box">
+        <div class="atlas-stat-num">🏆 ${streaks.longestStreak}</div>
+        <div class="atlas-stat-lbl">${t.streakBestLabel}</div>
+      </div>
+      <div class="atlas-stat-box">
+        <div class="atlas-stat-num">📅 ${streaks.totalDays}</div>
+        <div class="atlas-stat-lbl">${t.activeDaysLabel}</div>
+      </div>
+    </div>
+
+    <p><strong>${t.calendarTitle}</strong></p>
+    <div class="streak-cal-grid">${calCells}</div>
+
+    <p><strong>${t.modeRecordsTitle}</strong></p>
+    <div class="mode-records-list">${modeRows}</div>
+
+    <button class="pill-btn" style="border-color:#ef4444;color:#f87171;" onclick="resetLocalProgress()">
+      🗑️ ${t.resetProgressBtn}
+    </button>
+  `;
+
+  document.getElementById("modal-title").textContent = t.atlasModalTitle;
+  document.getElementById("modal-body").innerHTML = html;
+  document.getElementById("legal-modal").classList.remove("hidden");
+}
+
+function resetLocalProgress() {
+  const t = UI_STRINGS[currentLang];
+  if (!window.confirm(t.resetConfirm)) return;
+  userProgress = getDefaultProgress();
+  saveProgress();
+  closeLegal();
+  renderHome();
+}
+
 function renderHome() {
   const t = UI_STRINGS[currentLang];
   updateNavTexts();
@@ -982,7 +1509,11 @@ function renderHome() {
     catList.forEach(cat => {
       const btn = document.createElement("button");
       btn.className = "cat-card" + (activeCat === cat.id ? " selected" : "");
-      btn.innerHTML = `<span class="cat-icon">${cat.icon}</span><div class="cat-title">${cat[currentLang]}</div>`;
+      const catEntry = userProgress.atlas.categories?.[cat.id];
+      const badge = cat.id !== "all" && catEntry?.mastered
+        ? ` <span style="color:#4ade80;font-size:0.75rem;">✓</span>`
+        : "";
+      btn.innerHTML = `<span class="cat-icon">${cat.icon}</span><div class="cat-title">${cat[currentLang]}${badge}</div>`;
       btn.onclick = () => {
         if (isHol) selectedHolCategory = cat.id;
         else if (isCityMode) selectedPinpointCategory = cat.id;
@@ -1053,6 +1584,8 @@ function renderHome() {
     startBtn.textContent = t.startBtn(playableCount);
     startBtn.disabled = playableCount === 0;
   }
+
+  renderMetaActionsBar();
 }
 
 // =========================================================================
@@ -1101,7 +1634,6 @@ function buildFlagQuestion(flagItem) {
 
 function buildFlagZoomQuestion(flagItem) {
   const base = buildFlagQuestion(flagItem);
-  // Zufälliger Fokuspunkt im Bereich 25%–75%, damit nie leerer Rand gezoomt wird
   const originX = Math.floor(25 + Math.random() * 50);
   const originY = Math.floor(25 + Math.random() * 50);
   return {
@@ -1154,7 +1686,6 @@ function buildMissingNeighborQuestions(pool, count) {
   const allCountries = getAllCountries195();
   const byId = new Map(allCountries.map(c => [c.id, c]));
 
-  // Nur Länder wählen, die mindestens 2 direkte Nachbarn haben (spannende Lücken!)
   const candidates = pool.filter(c => {
     const nSet = countryNeighborsMap[c.id];
     if (!nSet) return false;
@@ -1171,7 +1702,6 @@ function buildMissingNeighborQuestions(pool, count) {
 
   return picked.map(target => {
     const nIds = [...(countryNeighborsMap[target.id] || [])].filter(nid => byId.has(nid));
-    // Als Distraktoren zuerst Nachbarn oder regionale Länder nehmen
     const neighborDistractors = nIds
       .map(nid => byId.get(nid))
       .sort(() => Math.random() - 0.5)
@@ -1226,7 +1756,6 @@ function buildBorderRouteQuestions(pool, count) {
   const allCountries = getAllCountries195();
   const byId = new Map(allCountries.map(c => [c.id, c]));
 
-  // Nur Festland-Länder mit Nachbarn
   const connected = allCountries.filter(c => {
     const nSet = countryNeighborsMap[c.id];
     return nSet && [...nSet].some(nid => byId.has(nid));
@@ -1252,7 +1781,7 @@ function buildBorderRouteQuestions(pool, count) {
       const shortest = findShortestBorderPath(start.id, end.id);
       if (!shortest) continue;
 
-      const parSteps = shortest.length - 1; // Anzahl Grenzübertritte
+      const parSteps = shortest.length - 1;
       let diffOk = true;
       if (selectedDifficulty === "easy") diffOk = parSteps >= 2 && parSteps <= 3;
       else if (selectedDifficulty === "medium") diffOk = parSteps >= 3 && parSteps <= 5;
@@ -1306,7 +1835,6 @@ function buildDossierQuestions(pool, count) {
     const nSet = countryNeighborsMap[numId];
     const isLandlocked = !nSet || nSet.size === 0 ? false : checkIfLandlocked(numId);
 
-    // Hauptstadt aus PINPOINT_CITIES suchen (falls vorhanden)
     const capMatch = capitals.find(cap =>
       cap.countryEn.toLowerCase() === hc.en.toLowerCase() ||
       cap.countryDe.toLowerCase() === hc.de.toLowerCase()
@@ -1341,7 +1869,6 @@ function buildDossierQuestions(pool, count) {
 }
 
 function checkIfLandlocked(countryId) {
-  // Bekannte Inseln & Küstenstaaten prüfen; Binnenstaaten über bekannte Liste + Nachbarschafts-Heuristik
   const LANDLOCKED_IDS = new Set([
     "004","020","051","040","031","112","064","068","072","854","108","140","148","203",
     "748","231","348","398","417","418","426","438","442","454","466","498","496","524",
@@ -1552,7 +2079,6 @@ function injectChronoStyles() {
 
 function initChronoChain() {
   const shuffled = [...HOL_INVENTIONS].sort(() => Math.random() - 0.5);
-  // 2 weit auseinanderliegende Startkarten wählen
   let anchors = shuffled.slice(0, 2);
   for (let i = 0; i < 40; i++) {
     const a = shuffled[Math.floor(Math.random() * shuffled.length)];
@@ -1660,7 +2186,6 @@ function handleChronoSlot(slotIdx) {
   const beforeNext = !nextItem || card.year <= nextItem.year;
   const isCorrect = afterPrev && beforeNext;
 
-  // Karte an ihre echte chronologische Position einsortieren
   let trueIdx = chronoState.timeline.findIndex(item => item.year > card.year);
   if (trueIdx === -1) trueIdx = chronoState.timeline.length;
   chronoState.timeline.splice(trueIdx, 0, { ...card });
@@ -1668,10 +2193,12 @@ function handleChronoSlot(slotIdx) {
   chronoState.lastWasCorrect = isCorrect;
 
   const yearStr = formatHolValue("inventions", card.year, currentLang);
+  recordAtlasOutcome("categories", "inventions", isCorrect);
 
   if (isCorrect) {
     correctCount++;
     streak++;
+    if (streak > bestRunStreak) bestRunStreak = streak;
     const earned = 100 + Math.max(0, (chronoState.timeline.length - 3) * 15);
     totalPoints += earned;
     lastStatusHtml = `<strong>${t.chronoRightSlot(yearStr, earned)}</strong> `;
@@ -1795,7 +2322,7 @@ function renderFlagZoomStage(item, keepState) {
   function stepZoom(now) {
     if (answered || item.buzzed) return;
     const elapsed = Math.min(durationMs, now - startTime);
-    const progress = elapsed / durationMs; // 0 -> 1
+    const progress = elapsed / durationMs;
     const currentScale = startScale - (startScale - 1.0) * progress;
     const currentPts = Math.max(50, Math.round(300 - 250 * progress));
 
@@ -1954,17 +2481,13 @@ function renderDossierArena(item) {
   const popStr = formatHolValue("population", item.pop, currentLang);
   const capStr = currentLang === "de" ? item.capitalDe : item.capitalEn;
 
-  let cluesHtml = "";
-
-  // Hinweis 1: Geographie & Fläche
-  cluesHtml += `
+  let cluesHtml = `
     <div class="dossier-clue-card">
       <div class="dossier-clue-title">${t.dossierClueTitles[0]}</div>
       <div class="dossier-clue-body">🌍 ${geoType} • 📐 ${t.dossierAreaText(areaStr)}</div>
     </div>
   `;
 
-  // Hinweis 2: Gedrehte Silhouette
   if (item.revealedClues >= 2 || answered) {
     cluesHtml += `
       <div class="dossier-clue-card">
@@ -1974,7 +2497,6 @@ function renderDossierArena(item) {
     `;
   }
 
-  // Hinweis 3: Einwohner & Hauptstadt
   if (item.revealedClues >= 3 || answered) {
     const capPart = capStr ? ` • 🏛️ ${t.dossierCapText(capStr)}` : "";
     cluesHtml += `
@@ -1985,7 +2507,6 @@ function renderDossierArena(item) {
     `;
   }
 
-  // Hinweis 4: Nationalflagge
   if (item.revealedClues >= 4 || answered) {
     cluesHtml += `
       <div class="dossier-clue-card">
@@ -2007,7 +2528,6 @@ function renderDossierArena(item) {
     </div>
   `;
 
-  // Silhouette in Hinweis 2 zeichnen
   if (item.revealedClues >= 2 || answered) {
     const rawFeature = mapFeatures.find(f => String(f.id).padStart(3, "0") === item.countryId);
     if (rawFeature) {
@@ -2057,10 +2577,14 @@ function handleDossierGuess(selectedIdx) {
   const item = activeQuestions[currentIndex];
   item.selectedChoice = selectedIdx;
   const reward = DOSSIER_POINTS[item.revealedClues - 1] || 50;
+  const isWin = selectedIdx === item.answer;
 
-  if (selectedIdx === item.answer) {
+  recordItemAtlas(item, isWin);
+
+  if (isWin) {
     correctCount++;
     streak++;
+    if (streak > bestRunStreak) bestRunStreak = streak;
     item.earned = reward;
     totalPoints += reward;
     lastStatusHtml = `<strong>${t.dossierWinMsg(reward, item[currentLang].name)}</strong> `;
@@ -2116,7 +2640,6 @@ function renderMissingNeighborPuzzle(item) {
   const proj = d3.geoNaturalEarth1().fitExtent([[24, 20], [436, 260]], combinedCollection);
   const pathGen = d3.geoPath().projection(proj);
 
-  // Umliegende Nachbarländer zeichnen
   svg.selectAll("path.missing-neighbor")
     .data(neighborFeatures)
     .enter()
@@ -2126,7 +2649,6 @@ function renderMissingNeighborPuzzle(item) {
     .style("stroke", "#64748b")
     .style("stroke-width", "1.2px");
 
-  // Gesuchtes Land in der Mitte: vor der Auflösung als gestrichelte Lücke, danach grün!
   svg.append("path")
     .datum(targetFeature)
     .attr("d", pathGen)
@@ -2135,7 +2657,6 @@ function renderMissingNeighborPuzzle(item) {
     .style("stroke-width", "2px")
     .style("stroke-dasharray", answered ? "none" : "5 4");
 
-  // Namen der Nachbarländer einblenden
   const allCountries = getAllCountries195();
   neighborFeatures.forEach(nf => {
     const nid = String(nf.id).padStart(3, "0");
@@ -2157,7 +2678,6 @@ function renderMissingNeighborPuzzle(item) {
     }
   });
 
-  // Fragezeichen in der Mitte (oder Name nach Lösung)
   const targetCenter = pathGen.centroid(targetFeature);
   if (isFinite(targetCenter[0]) && isFinite(targetCenter[1])) {
     svg.append("text")
@@ -2575,10 +3095,14 @@ function handleHolGuess(selectedIdx) {
   const t = UI_STRINGS[currentLang];
   const item = activeQuestions[currentIndex];
   item.userChoice = selectedIdx;
+  const isWin = selectedIdx === item.answer;
 
-  if (selectedIdx === item.answer) {
+  recordItemAtlas(item, isWin);
+
+  if (isWin) {
     correctCount++;
     streak++;
+    if (streak > bestRunStreak) bestRunStreak = streak;
     totalPoints += 100;
     lastStatusHtml = `<strong>${t.holCorrectMsg}</strong> `;
   } else {
@@ -2602,10 +3126,62 @@ function handleHolGuess(selectedIdx) {
 }
 
 // =========================================================================
-// 10. SPIELSTART
+// 10. SPIELSTART (NORMAL, TAGES-CHALLENGE & FEHLER-TRAINING)
 // =========================================================================
+async function startDailyChallenge() {
+  stopTimer();
+  const seedStr = getTodaySeedStr();
+  isDailySession = true;
+  dailySeedValue = seedStr;
+  isWeaknessSession = false;
+
+  currentIndex = 0;
+  correctCount = 0;
+  totalPoints = 0;
+  streak = 0;
+  bestRunStreak = 0;
+  chronoState = null;
+
+  document.getElementById("screen-home").classList.add("hidden");
+  document.getElementById("screen-result").classList.add("hidden");
+  document.getElementById("screen-quiz").classList.remove("hidden");
+
+  await ensureWorldDataLoaded();
+  activeQuestions = buildDailySeedQuestions(seedStr);
+  renderQuestion(false);
+}
+
+async function startWeaknessTraining() {
+  stopTimer();
+  const weakQuestions = buildWeaknessQuestions();
+  if (weakQuestions.length === 0) return;
+
+  isDailySession = false;
+  dailySeedValue = null;
+  isWeaknessSession = true;
+
+  currentIndex = 0;
+  correctCount = 0;
+  totalPoints = 0;
+  streak = 0;
+  bestRunStreak = 0;
+  chronoState = null;
+
+  document.getElementById("screen-home").classList.add("hidden");
+  document.getElementById("screen-result").classList.add("hidden");
+  document.getElementById("screen-quiz").classList.remove("hidden");
+
+  await ensureWorldDataLoaded();
+  activeQuestions = weakQuestions;
+  renderQuestion(false);
+}
+
 async function startQuiz() {
   stopTimer();
+  isDailySession = false;
+  dailySeedValue = null;
+  isWeaknessSession = false;
+
   const pool = [...getPool()].sort(() => Math.random() - 0.5);
   const count = selectedLength === "all" ? pool.length : Math.min(pool.length, selectedLength);
 
@@ -2613,6 +3189,7 @@ async function startQuiz() {
   correctCount = 0;
   totalPoints = 0;
   streak = 0;
+  bestRunStreak = 0;
   chronoState = null;
 
   document.getElementById("screen-home").classList.add("hidden");
@@ -2851,7 +3428,6 @@ async function ensureWorldDataLoaded() {
     const geometries = worldAtlasData.objects.countries.geometries;
     const rawNeighbors = topojson.neighbors(geometries);
 
-    // Nachbarschafts-Graph mit 3-stelligen ISO-IDs aufbauen
     countryNeighborsMap = {};
     geometries.forEach((geom, idx) => {
       const id = String(geom.id).padStart(3, "0");
@@ -3158,7 +3734,6 @@ function handleBorderCountryClick(clickedId, clickedFeature) {
 
   if (clickedId === currentId) return;
 
-  // Rücksprung auf ein bereits besuchtes Land in der Kette erlauben
   const existingIdx = item.visitedPath.indexOf(clickedId);
   if (existingIdx !== -1) {
     item.visitedPath = item.visitedPath.slice(0, existingIdx + 1);
@@ -3185,8 +3760,10 @@ function handleBorderCountryClick(clickedId, clickedFeature) {
     const earned = Math.max(75, 250 - extraSteps * 40);
     item.earned = earned;
 
+    recordItemAtlas(item, true);
     correctCount++;
     streak++;
+    if (streak > bestRunStreak) bestRunStreak = streak;
     totalPoints += earned;
     lastStatusHtml = `<strong>${t.borderWinMsg(steps, item.parSteps, earned)}</strong> `;
 
@@ -3261,7 +3838,6 @@ function drawFlightMapPoints(item) {
   const ptB = mapProjection([item.cityB.lon, item.cityB.lat]);
 
   if (answered) {
-    // Echte gekrümmte Großkreis-Route (Orthodrome) über d3.geoInterpolate / LineString
     const greatCircleGeo = {
       type: "LineString",
       coordinates: [
@@ -3334,6 +3910,7 @@ function lockFlightEstimate() {
   if (errPct <= 25) {
     correctCount++;
     streak++;
+    if (streak > bestRunStreak) bestRunStreak = streak;
   } else {
     streak = 0;
   }
@@ -3551,6 +4128,7 @@ function handleRadarClick(event) {
       item.earned = getRadarScoreByPing(item.pings.length);
       correctCount++;
       streak++;
+      if (streak > bestRunStreak) bestRunStreak = streak;
       totalPoints += item.earned;
       lastStatusHtml = `<strong>${t.radarWinMsg(item.pings.length, distKm, item.earned, item[currentLang].name, item[currentLang].country)}</strong> `;
     } else {
@@ -3668,6 +4246,7 @@ function handlePinpointClick(event) {
   if (distKm <= 800) {
     correctCount++;
     streak++;
+    if (streak > bestRunStreak) bestRunStreak = streak;
   } else {
     streak = 0;
   }
@@ -3702,6 +4281,9 @@ function handleMapGuess(clickedId, clickedFeature) {
   const t = UI_STRINGS[currentLang];
   const item = activeQuestions[currentIndex];
   const targetId = item.countryId;
+  const isWin = clickedId === targetId;
+
+  recordItemAtlas(item, isWin);
 
   if (mapSvg) mapSvg.classed("blind-mode", false);
 
@@ -3709,9 +4291,10 @@ function handleMapGuess(clickedId, clickedFeature) {
     .classed("correct", d => String(d.id).padStart(3, "0") === targetId)
     .classed("wrong", d => clickedId !== targetId && String(d.id).padStart(3, "0") === clickedId);
 
-  if (clickedId === targetId) {
+  if (isWin) {
     correctCount++;
     streak++;
+    if (streak > bestRunStreak) bestRunStreak = streak;
     totalPoints += selectedDifficulty === "extreme" ? 200 : 100;
     lastStatusHtml = `<strong>${t.mapCorrectMsg}</strong> `;
   } else {
@@ -3781,7 +4364,6 @@ function renderQuestion(keepState) {
   const mapWrapper = document.getElementById("map-wrapper");
   const optionsList = document.getElementById("options-list");
 
-  // Alle dynamischen Spezial-Container vorab ausblenden
   ["hol-arena", "silhouette-box", "radar-hud", "chrono-arena", "flag-zoom-wrap", "dossier-arena", "missing-box", "flight-controls"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.classList.add("hidden");
@@ -3791,8 +4373,12 @@ function renderQuestion(keepState) {
   flagBox.classList.add("hidden");
   mapWrapper.classList.add("hidden");
 
+  const sessionPrefix = isDailySession
+    ? `${t.dailyMetaLabel(dailySeedValue)} • `
+    : (isWeaknessSession ? "🎯 " : "");
+
   if (item.isChrono) {
-    document.getElementById("q-meta").textContent = t.tabs.chrono;
+    document.getElementById("q-meta").textContent = `${sessionPrefix}${t.tabs.chrono}`;
     document.getElementById("q-text").textContent = t.chronoPrompt;
     renderChronoArena();
   } else if (item.isHol) {
@@ -3800,19 +4386,19 @@ function renderQuestion(keepState) {
     const diffLabel = selectedDifficulty === "all"
       ? (currentLang === "de" ? "Alle Stufen" : "All Levels")
       : t.difficulties[selectedDifficulty];
-    document.getElementById("q-meta").textContent = `${catObj[currentLang]} • ${diffLabel}`;
+    document.getElementById("q-meta").textContent = `${sessionPrefix}${catObj[currentLang]} • ${diffLabel}`;
     document.getElementById("q-text").textContent = t.holPrompts[item.subType];
     renderHolArena(item);
   } else if (item.isFlagZoom) {
-    document.getElementById("q-meta").textContent = `${t.tabs.flagzoom} • ${t.difficulties[item.difficulty]}`;
+    document.getElementById("q-meta").textContent = `${sessionPrefix}${t.tabs.flagzoom} • ${t.difficulties[item.difficulty]}`;
     document.getElementById("q-text").textContent = t.flagZoomPrompt;
     renderFlagZoomStage(item, keepState);
   } else if (item.isDossier) {
-    document.getElementById("q-meta").textContent = t.tabs.dossier;
+    document.getElementById("q-meta").textContent = `${sessionPrefix}${t.tabs.dossier}`;
     document.getElementById("q-text").textContent = t.dossierPrompt;
     renderDossierArena(item);
   } else if (item.isMissing) {
-    document.getElementById("q-meta").textContent = `${t.tabs.missing} • ${t.difficulties[item.difficulty]}`;
+    document.getElementById("q-meta").textContent = `${sessionPrefix}${t.tabs.missing} • ${t.difficulties[item.difficulty]}`;
     document.getElementById("q-text").textContent = t.missingPrompt;
     renderMissingNeighborPuzzle(item);
     item.choices.forEach((choice, idx) => {
@@ -3823,7 +4409,7 @@ function renderQuestion(keepState) {
       optionsList.appendChild(btn);
     });
   } else if (item.isSilhouette) {
-    document.getElementById("q-meta").textContent = `${t.tabs.silhouette} • ${t.difficulties[item.difficulty]}`;
+    document.getElementById("q-meta").textContent = `${sessionPrefix}${t.tabs.silhouette} • ${t.difficulties[item.difficulty]}`;
     document.getElementById("q-text").textContent = t.silhouettePrompt;
     renderSilhouetteShape(item);
     item.choices.forEach((choice, idx) => {
@@ -3836,7 +4422,7 @@ function renderQuestion(keepState) {
   } else if (item.isBorder) {
     mapWrapper.classList.remove("hidden");
     document.getElementById("ui-map-hint").textContent = t.borderHint;
-    document.getElementById("q-meta").textContent = t.tabs.border;
+    document.getElementById("q-meta").textContent = `${sessionPrefix}${t.tabs.border}`;
     document.getElementById("q-text").textContent = t.borderPrompt(item[currentLang].startName, item[currentLang].endName);
 
     if (mapSvg) {
@@ -3850,7 +4436,7 @@ function renderQuestion(keepState) {
   } else if (item.isFlight) {
     mapWrapper.classList.remove("hidden");
     document.getElementById("ui-map-hint").textContent = t.flightHint;
-    document.getElementById("q-meta").textContent = t.tabs.flight;
+    document.getElementById("q-meta").textContent = `${sessionPrefix}${t.tabs.flight}`;
     document.getElementById("q-text").textContent = t.flightPrompt(item[currentLang].nameA, item[currentLang].nameB);
 
     if (mapSvg) {
@@ -3875,7 +4461,7 @@ function renderQuestion(keepState) {
       ? (currentLang === "de" ? "💀 Ohne Grenzen" : "💀 Blind Map")
       : t.difficulties[item.difficulty];
 
-    document.getElementById("q-meta").textContent = `${t.tabs.radar} • ${typeBadge} • ${diffBadge}`;
+    document.getElementById("q-meta").textContent = `${sessionPrefix}${t.tabs.radar} • ${typeBadge} • ${diffBadge}`;
     document.getElementById("q-text").textContent = t.radarPrompt(typeLabel);
     updateRadarHud(item);
 
@@ -3894,13 +4480,13 @@ function renderQuestion(keepState) {
     document.getElementById("ui-map-hint").textContent = t.pinpointHint;
 
     const typeLabel = item.cityType === "capital"
-      ? (currentLang === "de" ? "Hauptstadt" : "Capital")
-      : (currentLang === "de" ? "Weltmetropole" : "World City");
+      ? (currentLang === "de" ? "Hauptstadt" : "capital city")
+      : (currentLang === "de" ? "Weltmetropole" : "world city");
     const diffBadge = selectedDifficulty === "extreme"
       ? (currentLang === "de" ? "💀 Ohne Grenzen" : "💀 Blind Map")
       : t.difficulties[item.difficulty];
 
-    document.getElementById("q-meta").textContent = `${t.tabs.pinpoint} • ${typeLabel} • ${diffBadge}`;
+    document.getElementById("q-meta").textContent = `${sessionPrefix}${t.tabs.pinpoint} • ${typeLabel} • ${diffBadge}`;
     document.getElementById("q-text").textContent = t.pinpointPrompt(item[currentLang].name);
 
     if (mapSvg) {
@@ -3917,7 +4503,7 @@ function renderQuestion(keepState) {
     mapWrapper.classList.remove("hidden");
     document.getElementById("ui-map-hint").textContent = t.mapHint;
     const diffBadge = selectedDifficulty === "extreme" ? t.difficulties.extreme : t.difficulties[item.difficulty];
-    document.getElementById("q-meta").textContent = `${t.tabs.map} • ${diffBadge}`;
+    document.getElementById("q-meta").textContent = `${sessionPrefix}${t.tabs.map} • ${diffBadge}`;
     document.getElementById("q-text").textContent = t.mapPrompt(item[currentLang].name);
 
     if (mapSvg) {
@@ -3930,7 +4516,7 @@ function renderQuestion(keepState) {
     }
   } else if (item.isFlag) {
     flagBox.classList.remove("hidden");
-    document.getElementById("q-meta").textContent = `${t.tabs.flags} • ${t.difficulties[item.difficulty]}`;
+    document.getElementById("q-meta").textContent = `${sessionPrefix}${t.tabs.flags} • ${t.difficulties[item.difficulty]}`;
     document.getElementById("q-text").textContent = t.flagPrompt;
     document.getElementById("flag-img").src = `https://flagcdn.com/w320/${item.code}.png`;
 
@@ -3944,7 +4530,8 @@ function renderQuestion(keepState) {
   } else {
     const qData = item[currentLang];
     const catObj = CATEGORIES.find(c => c.id === item.category);
-    document.getElementById("q-meta").textContent = `${catObj[currentLang]} • ${t.difficulties[item.difficulty]}`;
+    const catName = catObj ? catObj[currentLang] : (item.category || "");
+    document.getElementById("q-meta").textContent = `${sessionPrefix}${catName} • ${t.difficulties[item.difficulty]}`;
     document.getElementById("q-text").textContent = qData.q;
 
     qData.options.forEach((opt, idx) => {
@@ -3983,6 +4570,10 @@ function handleAnswer(selectedIdx) {
   const item = activeQuestions[currentIndex];
   const isChoiceObjMode = item.isFlag || item.isFlagZoom || item.isSilhouette || item.isMissing;
   const correctIdx = isChoiceObjMode ? item.answer : item[currentLang].answer;
+  const isWin = selectedIdx === correctIdx;
+
+  recordItemAtlas(item, isWin);
+
   const buttons = document.querySelectorAll(".option-btn");
 
   buttons.forEach((btn, idx) => {
@@ -3995,9 +4586,10 @@ function handleAnswer(selectedIdx) {
     renderMissingNeighborPuzzle(item);
   }
 
-  if (selectedIdx === correctIdx) {
+  if (isWin) {
     correctCount++;
     streak++;
+    if (streak > bestRunStreak) bestRunStreak = streak;
     let earned = 100;
     if (currentMode === "timed") {
       earned = Math.max(50, Math.round(50 + (timeLeft / QUESTION_TIME) * 100));
@@ -4019,6 +4611,8 @@ function handleTimeout() {
 
   const t = UI_STRINGS[currentLang];
   const item = activeQuestions[currentIndex];
+  recordItemAtlas(item, false);
+
   const isChoiceObjMode = item.isFlag || item.isFlagZoom || item.isSilhouette || item.isMissing;
   const correctIdx = isChoiceObjMode ? item.answer : item[currentLang].answer;
 
@@ -4071,6 +4665,8 @@ function renderResults() {
 
   if (currentMode === "chrono" && chronoState) {
     const chainLen = chronoState.timeline.length;
+    recordModeRunStats("chrono", totalPoints, bestRunStreak, false, null);
+
     let rankIdx = 0;
     if (chainLen >= 18) rankIdx = 3;
     else if (chainLen >= 12) rankIdx = 2;
@@ -4088,12 +4684,23 @@ function renderResults() {
 
   const total = activeQuestions.length;
   const pct = Math.round((correctCount / total) * 100);
+
+  recordModeRunStats(
+    currentMode,
+    totalPoints,
+    bestRunStreak,
+    isDailySession,
+    isDailySession ? { score: totalPoints, correct: correctCount, total } : null
+  );
+
   let rankIdx = 0;
   if (pct >= 90) rankIdx = 3;
   else if (pct >= 70) rankIdx = 2;
   else if (pct >= 40) rankIdx = 1;
 
-  document.getElementById("ui-res-title").textContent = t.resTitle;
+  document.getElementById("ui-res-title").textContent = isDailySession
+    ? `${t.resTitle} (${dailySeedValue})`
+    : t.resTitle;
   document.getElementById("res-score").textContent = `${correctCount} / ${total}`;
   document.getElementById("res-points").textContent = t.resPoints(totalPoints);
   document.getElementById("res-rank").textContent = t.ranks[rankIdx];
@@ -4104,11 +4711,11 @@ function renderResults() {
 
 function shareResult() {
   const t = UI_STRINGS[currentLang];
-  const modeName = t.tabs[currentMode];
+  const label = isDailySession ? `Daily ${dailySeedValue}` : t.tabs[currentMode];
   const scoreSummary = currentMode === "chrono" && chronoState
     ? `${chronoState.timeline.length} cards`
     : `${correctCount}/${activeQuestions.length}`;
-  const text = `🧠 BrainPulse (${modeName}): ${scoreSummary} (${totalPoints} pts) 🔥`;
+  const text = `🧠 BrainPulse (${label}): ${scoreSummary} (${totalPoints} pts) 🔥`;
 
   if (navigator.clipboard) {
     navigator.clipboard.writeText(text).then(() => {
@@ -4119,13 +4726,16 @@ function shareResult() {
 
 function goHome() {
   stopTimer();
+  isDailySession = false;
+  dailySeedValue = null;
+  isWeaknessSession = false;
   document.getElementById("screen-quiz").classList.add("hidden");
   document.getElementById("screen-result").classList.add("hidden");
   document.getElementById("screen-home").classList.remove("hidden");
   renderHome();
 }
 
-// Legal Modal
+// Legal & Atlas Modal
 function openLegal(type) {
   const legal = UI_STRINGS[currentLang].legal;
   document.getElementById("modal-title").textContent = type === "imprint" ? legal.imprintTitle : legal.privacyTitle;
