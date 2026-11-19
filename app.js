@@ -1524,19 +1524,24 @@ function renderHome() {
     });
   }
 
-  const diffGroup = document.getElementById("diff-row").parentElement;
-  const lenGroup = document.getElementById("len-row").parentElement;
+  const diffLabel = document.getElementById("ui-diff-label");
+  const diffRow = document.getElementById("diff-row");
+  const lenLabel = document.getElementById("ui-len-label");
+  const lenRow = document.getElementById("len-row");
 
   if (currentMode === "chrono") {
-    diffGroup.classList.add("hidden");
-    lenGroup.classList.add("hidden");
+    diffLabel.classList.add("hidden");
+    diffRow.classList.add("hidden");
+    lenLabel.classList.add("hidden");
+    lenRow.classList.add("hidden");
   } else {
-    diffGroup.classList.remove("hidden");
-    lenGroup.classList.remove("hidden");
+    diffLabel.classList.remove("hidden");
+    diffRow.classList.remove("hidden");
+    lenLabel.classList.remove("hidden");
+    lenRow.classList.remove("hidden");
 
     const stepOffset = hideCategories ? 1 : 2;
-    document.getElementById("ui-diff-label").textContent = `${stepOffset}. ${t.diffLabel}`;
-    const diffRow = document.getElementById("diff-row");
+    diffLabel.textContent = `${stepOffset}. ${t.diffLabel}`;
     diffRow.innerHTML = "";
     const supportsBlind = currentMode === "map" || currentMode === "pinpoint" || currentMode === "radar";
     const diffs = supportsBlind ? ["all", "easy", "medium", "hard", "extreme"] : ["all", "easy", "medium", "hard"];
@@ -1554,8 +1559,7 @@ function renderHome() {
       diffRow.appendChild(btn);
     });
 
-    document.getElementById("ui-len-label").textContent = `${stepOffset + 1}. ${t.lenLabel}`;
-    const lenRow = document.getElementById("len-row");
+    lenLabel.textContent = `${stepOffset + 1}. ${t.lenLabel}`;
     lenRow.innerHTML = "";
     [10, 20, 50, "all"].forEach(len => {
       const btn = document.createElement("button");
@@ -2116,25 +2120,33 @@ function getOrCreateChronoArena() {
 }
 
 function renderChronoArena() {
+  if (!chronoState) {
+    initChronoChain();
+  }
   const t = UI_STRINGS[currentLang];
   const box = getOrCreateChronoArena();
+  if (!box) return;
   box.classList.remove("hidden");
 
   const hearts = "❤️".repeat(chronoState.lives) + "🖤".repeat(Math.max(0, 3 - chronoState.lives));
   const chainLen = chronoState.timeline.length;
 
-  document.getElementById("ui-q-counter").textContent = t.chronoCount(chainLen);
-  document.getElementById("ui-score").textContent = t.pointsBadge(totalPoints);
-  document.getElementById("ui-streak").textContent = `🔥 ${streak}`;
-  document.getElementById("progress-fill").style.width = `${Math.min(100, (chainLen / 20) * 100)}%`;
+  const qCounter = document.getElementById("ui-q-counter");
+  const scoreEl = document.getElementById("ui-score");
+  const streakEl = document.getElementById("ui-streak");
+  const progEl = document.getElementById("progress-fill");
+  if (qCounter) qCounter.textContent = t.chronoCount(chainLen);
+  if (scoreEl) scoreEl.textContent = t.pointsBadge(totalPoints);
+  if (streakEl) streakEl.textContent = `🔥 ${streak}`;
+  if (progEl) progEl.style.width = `${Math.min(100, (chainLen / 20) * 100)}%`;
 
   let drawHtml = "";
   if (chronoState.currentCard && !answered) {
     const card = chronoState.currentCard;
     drawHtml = `
       <div class="chrono-draw-card">
-        <div class="chrono-draw-icon">${card.icon}</div>
-        <div class="chrono-draw-title">${card[currentLang]}</div>
+        <div class="chrono-draw-icon">${card.icon || "⏳"}</div>
+        <div class="chrono-draw-title">${card[currentLang] || card.en || card.de || ""}</div>
         <div class="chrono-draw-year">???</div>
       </div>
     `;
@@ -2153,10 +2165,10 @@ function renderChronoArena() {
       listHtml += `
         <div class="chrono-placed-item${highlightCls}">
           <div class="chrono-placed-left">
-            <span>${entry.icon}</span>
-            <span>${entry[currentLang]}</span>
+            <span>${entry.icon || "⏳"}</span>
+            <span>${entry[currentLang] || entry.en || entry.de || ""}</span>
           </div>
-          <span class="chrono-placed-year">${formatHolValue("inventions", entry.year, currentLang)}</span>
+          <span class="chrono-placed-year">${formatHolValue("inventions", Number(entry.year), currentLang)}</span>
         </div>
       `;
     }
@@ -2172,27 +2184,27 @@ function renderChronoArena() {
     ${listHtml}
   `;
 }
-
 function handleChronoSlot(slotIdx) {
   if (answered || !chronoState || !chronoState.currentCard) return;
   answered = true;
 
   const t = UI_STRINGS[currentLang];
   const card = chronoState.currentCard;
+  const cardYear = Number(card.year);
   const prevItem = slotIdx > 0 ? chronoState.timeline[slotIdx - 1] : null;
   const nextItem = slotIdx < chronoState.timeline.length ? chronoState.timeline[slotIdx] : null;
 
-  const afterPrev = !prevItem || card.year >= prevItem.year;
-  const beforeNext = !nextItem || card.year <= nextItem.year;
+  const afterPrev = !prevItem || cardYear >= Number(prevItem.year);
+  const beforeNext = !nextItem || cardYear <= Number(nextItem.year);
   const isCorrect = afterPrev && beforeNext;
 
-  let trueIdx = chronoState.timeline.findIndex(item => item.year > card.year);
+  let trueIdx = chronoState.timeline.findIndex(item => Number(item.year) > cardYear);
   if (trueIdx === -1) trueIdx = chronoState.timeline.length;
   chronoState.timeline.splice(trueIdx, 0, { ...card });
   chronoState.lastInsertedId = card.id;
   chronoState.lastWasCorrect = isCorrect;
 
-  const yearStr = formatHolValue("inventions", card.year, currentLang);
+  const yearStr = formatHolValue("inventions", cardYear, currentLang);
   recordAtlasOutcome("categories", "inventions", isCorrect);
 
   if (isCorrect) {
@@ -2213,13 +2225,23 @@ function handleChronoSlot(slotIdx) {
 
   renderChronoArena();
 
+  const cardFact =
+    (card && card[currentLang] && card[currentLang].fact) ||
+    (currentLang === "de" ? card?.factDe : card?.factEn) ||
+    card?.factEn ||
+    card?.factDe ||
+    "";
+
   const expBox = document.getElementById("explanation-box");
-  expBox.innerHTML = `${lastStatusHtml}<strong>${t.didYouKnow}</strong> ${card[currentLang].fact}`;
-  expBox.style.display = "block";
+  if (expBox) {
+    expBox.innerHTML = `${lastStatusHtml}<strong>${t.didYouKnow}</strong> ${cardFact}`;
+    expBox.style.display = "block";
+  }
 
   const nextBtn = document.getElementById("btn-next");
-  nextBtn.textContent = chronoState.gameOver ? t.finishBtn : t.nextBtn;
-  document.getElementById("next-wrap").style.display = "block";
+  const nextWrap = document.getElementById("next-wrap");
+  if (nextBtn) nextBtn.textContent = chronoState.gameOver ? t.finishBtn : t.nextBtn;
+  if (nextWrap) nextWrap.style.display = "block";
 }
 
 // =========================================================================

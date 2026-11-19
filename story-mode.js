@@ -1,8 +1,216 @@
 // =========================================================================
-// ERWEITERUNG V (MULTI-KAMPAGNEN STORY HUB): NAPOLEON, ANTIKES ROM & ENTDECKER
-// 3 Kampagnen · 16 Kapitel · 80 Aufgaben · Story-Info NACH jeder Antwort
+// ERWEITERUNG V (NAPOLEON FULL GRAPHIC & CINEMATIC EDITION)
+// Komplette Napoleon-Kampagne mit Kapitel-Artwork, sanftem Text-Einblenden,
+// klickbaren SVG-Grafik-Aufgaben, Story-Info NACH der Antwort & Next-Chapter-Flow
 // Einbinden nach world-companion.js: <script src="story-mode.js"></script>
 // =========================================================================
+
+function buildNapoleonChapterArtwork(sceneKey, title, badge) {
+  const artMap = {
+    corsica: `
+      <svg viewBox="0 0 420 175" class="story-art-svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="napBg1" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#0f172a"/>
+            <stop offset="60%" stop-color="#1e293b"/>
+            <stop offset="100%" stop-color="#172554"/>
+          </linearGradient>
+        </defs>
+        <rect width="420" height="175" rx="16" fill="url(#napBg1)"/>
+        <circle cx="330" cy="48" r="36" fill="rgba(250,204,21,0.12)"/>
+        <circle cx="330" cy="48" r="18" fill="rgba(250,204,21,0.22)"/>
+        <!-- Stilisierter junger Offizier mit Zweispitz -->
+        <g transform="translate(86, 26)">
+          <path d="M18 36 Q52 14 86 36 L74 44 Q52 34 30 44 Z" fill="#0f172a" stroke="#facc15" stroke-width="2"/>
+          <circle cx="52" cy="18" r="4" fill="#facc15"/>
+          <circle cx="52" cy="54" r="15" fill="#fde68a"/>
+          <path d="M39 50 Q52 41 65 50" fill="#451a03"/>
+          <path d="M26 118 L34 72 L70 72 L78 118 Z" fill="#1d4ed8" stroke="#93c5fd" stroke-width="1.5"/>
+          <path d="M34 72 L52 94 L70 72" fill="none" stroke="#f8fafc" stroke-width="3"/>
+          <rect x="24" y="70" width="14" height="7" rx="3" fill="#facc15"/>
+          <rect x="66" y="70" width="14" height="7" rx="3" fill="#facc15"/>
+        </g>
+        <!-- Insel- & Küstenlinien -->
+        <path d="M235 135 Q275 95 315 112 Q350 85 385 122 L385 155 L235 155 Z" fill="rgba(56,189,248,0.16)" stroke="#38bdf8" stroke-width="1.5"/>
+        <path d="M210 142 Q290 128 395 145" fill="none" stroke="rgba(250,204,21,0.35)" stroke-dasharray="5 5"/>
+      </svg>
+    `,
+    italy_egypt: `
+      <svg viewBox="0 0 420 175" class="story-art-svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="napBg2" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#0f172a"/>
+            <stop offset="100%" stop-color="#312e81"/>
+          </linearGradient>
+        </defs>
+        <rect width="420" height="175" rx="16" fill="url(#napBg2)"/>
+        <!-- Alpen- & Wüsten-Silhouette + Route -->
+        <polygon points="45,148 95,62 135,108 172,54 220,148" fill="rgba(226,232,240,0.14)" stroke="#93c5fd" stroke-width="1.5"/>
+        <polygon points="245,148 310,66 378,148" fill="rgba(250,204,21,0.14)" stroke="#facc15" stroke-width="1.5"/>
+        <path class="story-dash-anim" d="M88 126 Q185 38 312 104" fill="none" stroke="#facc15" stroke-width="2.5" stroke-dasharray="6 5"/>
+        <circle cx="88" cy="126" r="5" fill="#38bdf8"/>
+        <circle cx="312" cy="104" r="5" fill="#facc15"/>
+      </svg>
+    `,
+    empire: `
+      <svg viewBox="0 0 420 175" class="story-art-svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="napBg3" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#1e1b4b"/>
+            <stop offset="100%" stop-color="#0f172a"/>
+          </linearGradient>
+        </defs>
+        <rect width="420" height="175" rx="16" fill="url(#napBg3)"/>
+        <circle cx="210" cy="88" r="56" fill="rgba(250,204,21,0.09)" stroke="rgba(250,204,21,0.35)" stroke-width="1.5"/>
+        <!-- Stilisierte Krone -->
+        <g transform="translate(158, 52)">
+          <path d="M8 54 L16 18 L36 36 L52 10 L68 36 L88 18 L96 54 Z" fill="rgba(250,204,21,0.28)" stroke="#facc15" stroke-width="2.2"/>
+          <rect x="8" y="54" width="88" height="10" rx="4" fill="#facc15"/>
+          <circle cx="52" cy="8" r="4" fill="#38bdf8"/>
+        </g>
+      </svg>
+    `,
+    blockade: `
+      <svg viewBox="0 0 420 175" class="story-art-svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="napBg4" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#0f172a"/>
+            <stop offset="100%" stop-color="#134e4a"/>
+          </linearGradient>
+        </defs>
+        <rect width="420" height="175" rx="16" fill="url(#napBg4)"/>
+        <circle cx="130" cy="88" r="44" fill="rgba(56,189,248,0.12)" stroke="#38bdf8" stroke-width="1.5"/>
+        <circle cx="290" cy="88" r="44" fill="rgba(250,204,21,0.12)" stroke="#facc15" stroke-width="1.5"/>
+        <line x1="210" y1="28" x2="210" y2="148" stroke="#f87171" stroke-width="2.5" stroke-dasharray="5 5"/>
+        <path class="story-dash-anim" d="M135 88 L285 88" fill="none" stroke="#e2e8f0" stroke-width="2" stroke-dasharray="4 4"/>
+      </svg>
+    `,
+    russia: `
+      <svg viewBox="0 0 420 175" class="story-art-svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="napBg5" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#0f172a"/>
+            <stop offset="100%" stop-color="#1e3a8a"/>
+          </linearGradient>
+        </defs>
+        <rect width="420" height="175" rx="16" fill="url(#napBg5)"/>
+        <path d="M0 132 Q110 118 220 134 T420 128 L420 175 L0 175 Z" fill="rgba(224,242,254,0.14)"/>
+        <path class="story-dash-anim" d="M48 106 L210 68 L368 102" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-dasharray="7 5"/>
+        <circle cx="48" cy="106" r="5" fill="#facc15"/>
+        <circle cx="368" cy="102" r="5" fill="#f87171"/>
+      </svg>
+    `,
+    endgame: `
+      <svg viewBox="0 0 420 175" class="story-art-svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="napBg6" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#0f172a"/>
+            <stop offset="100%" stop-color="#334155"/>
+          </linearGradient>
+        </defs>
+        <rect width="420" height="175" rx="16" fill="url(#napBg6)"/>
+        <path d="M60 126 Q140 92 210 124 T360 116" fill="none" stroke="#38bdf8" stroke-width="2"/>
+        <circle cx="105" cy="112" r="7" fill="#facc15"/>
+        <circle cx="215" cy="122" r="8" fill="#f87171"/>
+        <circle cx="325" cy="114" r="7" fill="#94a3b8"/>
+      </svg>
+    `
+  };
+
+  return `
+    <div class="story-cinematic-banner">
+      ${artMap[sceneKey] || artMap.corsica}
+      <div class="story-cinematic-overlay">
+        <span class="story-cinematic-badge">${badge}</span>
+        <h3 class="story-cinematic-title">${title}</h3>
+      </div>
+    </div>
+  `;
+}
+
+function buildInteractiveGraphicSvg(graphicId, de) {
+  if (graphicId === "toulon_batteries") {
+    return `
+      <div style="font-size:0.82rem;color:#94a3b8;margin-bottom:8px;">
+        ${de ? "Klicke in der Grafik auf den taktisch entscheidenden Punkt, um den Hafen/Zugang zu sichern:" : "Click the decisive tactical point on the graphic to control the harbor approach:"}
+      </div>
+      <svg viewBox="0 0 420 185" class="story-interactive-svg">
+        <rect width="420" height="185" rx="14" fill="#0b1120"/>
+        <path d="M0 128 Q140 112 260 132 T420 124 L420 185 L0 185 Z" fill="rgba(14,165,233,0.22)"/>
+        <polygon points="35,135 110,65 185,135" fill="rgba(148,163,184,0.22)" stroke="#64748b"/>
+        <!-- Hotspot A: Höhenbatterie -->
+        <g class="story-svg-hotspot" onclick="submitGraphicPick('height_battery')">
+          <circle cx="110" cy="68" r="18" fill="rgba(250,204,21,0.18)" stroke="#facc15" stroke-width="2"/>
+          <text x="110" y="72" text-anchor="middle" fill="#fef08a" font-size="11" font-weight="800">A</text>
+          <text x="110" y="102" text-anchor="middle" fill="#e2e8f0" font-size="10">${de ? "Höhenbatterie" : "High Battery"}</text>
+        </g>
+        <!-- Hotspot B: Offenes Wasser -->
+        <g class="story-svg-hotspot" onclick="submitGraphicPick('open_sea')">
+          <circle cx="290" cy="148" r="18" fill="rgba(56,189,248,0.16)" stroke="#38bdf8" stroke-width="2"/>
+          <text x="290" y="152" text-anchor="middle" fill="#bae6fd" font-size="11" font-weight="800">B</text>
+          <text x="290" y="174" text-anchor="middle" fill="#cbd5e1" font-size="10">${de ? "Offene See" : "Open Sea"}</text>
+        </g>
+      </svg>
+    `;
+  }
+
+  if (graphicId === "coronation_crown") {
+    return `
+      <div style="font-size:0.82rem;color:#94a3b8;margin-bottom:8px;">
+        ${de ? "Klicke auf das Element in der Krönungsszene, das Napoleons Selbstkrönung 1804 symbolisiert:" : "Click the element in the coronation graphic that represents Napoleon's 1804 self-crowning:"}
+      </div>
+      <svg viewBox="0 0 420 185" class="story-interactive-svg">
+        <rect width="420" height="185" rx="14" fill="#0b1120"/>
+        <g class="story-svg-hotspot" onclick="submitGraphicPick('crown_self')">
+          <circle cx="210" cy="78" r="36" fill="rgba(250,204,21,0.16)" stroke="#facc15" stroke-width="2"/>
+          <path d="M184 90 L190 62 L204 76 L210 56 L216 76 L230 62 L236 90 Z" fill="#facc15"/>
+          <text x="210" y="132" text-anchor="middle" fill="#fef08a" font-size="11" font-weight="800">${de ? "Kaiserkrone" : "Imperial Crown"}</text>
+        </g>
+        <g class="story-svg-hotspot" onclick="submitGraphicPick('river_bank')">
+          <circle cx="92" cy="138" r="22" fill="rgba(56,189,248,0.15)" stroke="#38bdf8" stroke-width="1.8"/>
+          <text x="92" y="142" text-anchor="middle" fill="#bae6fd" font-size="10" font-weight="700">${de ? "Seine-Ufer" : "Riverbank"}</text>
+        </g>
+      </svg>
+    `;
+  }
+
+  if (graphicId === "moscow_retreat_route") {
+    return `
+      <div style="font-size:0.82rem;color:#94a3b8;margin-bottom:8px;">
+        ${de ? "Klicke auf der Routengrafik auf den Abschnitt, in dem Kälte und lange Nachschubwege 1812 besonders hart trafen:" : "Click the route segment on the graphic where winter cold and long supply lines hit hardest in 1812:"}
+      </div>
+      <svg viewBox="0 0 420 185" class="story-interactive-svg">
+        <rect width="420" height="185" rx="14" fill="#0b1120"/>
+        <path d="M55 110 L205 72 L365 106" fill="none" stroke="#475569" stroke-width="3" stroke-dasharray="6 5"/>
+        <g class="story-svg-hotspot" onclick="submitGraphicPick('start_border')">
+          <circle cx="55" cy="110" r="18" fill="rgba(56,189,248,0.18)" stroke="#38bdf8" stroke-width="2"/>
+          <text x="55" y="114" text-anchor="middle" fill="#bae6fd" font-size="10" font-weight="800">West</text>
+        </g>
+        <g class="story-svg-hotspot" onclick="submitGraphicPick('deep_winter_return')">
+          <circle cx="285" cy="89" r="22" fill="rgba(248,113,113,0.22)" stroke="#f87171" stroke-width="2.2"/>
+          <text x="285" y="93" text-anchor="middle" fill="#fecaca" font-size="10" font-weight="800">${de ? "Winter-Rückweg" : "Winter Return"}</text>
+        </g>
+      </svg>
+    `;
+  }
+
+  return `
+    <div style="font-size:0.82rem;color:#94a3b8;margin-bottom:8px;">
+      ${de ? "Klicke auf den Schauplatz in der Grafik, der den entscheidenden Wendepunkt 1815 markiert:" : "Click the location on the graphic marking the decisive 1815 turning point:"}
+    </div>
+    <svg viewBox="0 0 420 185" class="story-interactive-svg">
+      <rect width="420" height="185" rx="14" fill="#0b1120"/>
+      <g class="story-svg-hotspot" onclick="submitGraphicPick('waterloo_point')">
+        <circle cx="210" cy="88" r="28" fill="rgba(250,204,21,0.2)" stroke="#facc15" stroke-width="2"/>
+        <text x="210" y="92" text-anchor="middle" fill="#fef08a" font-size="11" font-weight="800">Waterloo (1815)</text>
+      </g>
+      <g class="story-svg-hotspot" onclick="submitGraphicPick('far_ocean')">
+        <circle cx="345" cy="142" r="20" fill="rgba(56,189,248,0.16)" stroke="#38bdf8" stroke-width="1.8"/>
+        <text x="345" y="146" text-anchor="middle" fill="#bae6fd" font-size="10" font-weight="700">${de ? "Südatlantik" : "South Atlantic"}</text>
+      </g>
+    </svg>
+  `;
+}
 
 const STORY_CAMPAIGNS = [
   {
@@ -10,18 +218,27 @@ const STORY_CAMPAIGNS = [
     icon: "⚔️",
     en: {
       title: "Napoleon: Rise, Empire & Fall",
-      subtitle: "6 chapters · 30 challenges. Corsica, revolutionary France, Italy & Egypt, the crown, trade war, Russia, and Waterloo."
+      subtitle: "6 cinematic chapters · 30 interactive challenges with chapter artwork, animated text reveals, interactive SVG graphics, and post-answer story lore."
     },
     de: {
       title: "Napoleon: Aufstieg, Kaiserreich & Fall",
-      subtitle: "6 Kapitel · 30 Aufgaben. Korsika, Revolutionszeit, Italien & Ägypten, Kaiserkrone, Handelskrieg, Russland & Waterloo."
+      subtitle: "6 animierte Kapitel · 30 interaktive Aufgaben mit Kapitel-Artwork, sanftem Text-Einblenden, klickbaren SVG-Grafiken & Story-Text nach jeder Antwort."
     },
     chapters: [
       {
         id: "nap_ch1",
         num: 1,
-        en: { title: "Chapter 1: Corsica, Revolution & Toulon", badge: "1769–1795" },
-        de: { title: "Kapitel 1: Korsika, Revolution & Toulon", badge: "1769–1795" },
+        sceneKey: "corsica",
+        en: {
+          title: "Chapter 1: Corsica, Revolution & Toulon",
+          badge: "1769–1795",
+          intro: "A young artillery officer steps onto a Europe shaken by revolution—where discipline, terrain, and decisive action turn turmoil into a rapid rise."
+        },
+        de: {
+          title: "Kapitel 1: Korsika, Revolution & Toulon",
+          badge: "1769–1795",
+          intro: "Ein junger Artillerieoffizier tritt in ein Europa im Umbruch – wo Gespür für Gelände, Disziplin und schnelles Handeln den Aufstieg eröffnen."
+        },
         steps: [
           {
             type: "choice",
@@ -53,18 +270,17 @@ const STORY_CAMPAIGNS = [
             }
           },
           {
-            type: "choice",
+            type: "graphic_pick",
+            graphicId: "toulon_batteries",
+            correctKey: "height_battery",
             en: {
-              q: "Which military specialty helped Napoleon break deadlocks early in his career, such as at Toulon in 1793?",
-              options: ["Concentrated artillery fire", "Deep-sea diving", "Horse archery", "Long-range balloons"],
-              storyInfo: "Trained as an artillery officer, Napoleon understood how well-placed cannon batteries could dominate harbors, roads, and high ground. At Toulon in 1793, targeting key vantage points helped force an enemy withdrawal and brought him early recognition."
+              q: "Using the graphic below, pick the tactical position that helps dominate key approaches early on.",
+              storyInfo: "Trained as an artillery officer, Napoleon understood how commanding high ground with cannon batteries could control harbors and approaches—an insight that helped turn early sieges and street crises."
             },
             de: {
-              q: "Welche militärische Stärke half Napoleon früh – etwa 1793 –, Pattsituationen zu durchbrechen?",
-              options: ["Gezielter Einsatz von Artillerie", "Tiefseetauchen", "Berittenes Bogenschießen", "Aufklärungsballons"],
-              storyInfo: "Als Artillerieoffizier wusste Napoleon, wie gezieltes Geschützfeuer Höhenzüge, Häfen und Zufahrten beherrschen konnte. Schon 1793 bei Toulon zeigte sich, wie stark konzentrierte Artillerie eine festgefahrene Lage drehen konnte."
-            },
-            answer: 0
+              q: "Wähle in der Grafik unten die Position, mit der sich Zugänge früh entscheidend sichern lassen.",
+              storyInfo: "Als Artillerieoffizier wusste Napoleon, wie Geschütze auf erhöhten Stellungen Zugänge und Häfen kontrollieren konnten – ein Prinzip, das seinen frühen Aufstieg prägte."
+            }
           },
           {
             type: "map",
@@ -102,8 +318,17 @@ const STORY_CAMPAIGNS = [
       {
         id: "nap_ch2",
         num: 2,
-        en: { title: "Chapter 2: Italy & Egypt", badge: "1796–1799" },
-        de: { title: "Kapitel 2: Italien & Ägypten", badge: "1796–1799" },
+        sceneKey: "italy_egypt",
+        en: {
+          title: "Chapter 2: Italy & Egypt",
+          badge: "1796–1799",
+          intro: "From swift maneuvers in northern Italy to a bold crossing toward Egypt—where soldiers and scholars crossed paths with ancient history."
+        },
+        de: {
+          title: "Kapitel 2: Italien & Ägypten",
+          badge: "1796–1799",
+          intro: "Von schnellen Märschen in Norditalien bis zu einem kühnen Zug nach Ägypten – wo Feldzüge und Forschung auf antike Spuren trafen."
+        },
         steps: [
           {
             type: "map",
@@ -184,8 +409,17 @@ const STORY_CAMPAIGNS = [
       {
         id: "nap_ch3",
         num: 3,
-        en: { title: "Chapter 3: Order, Law & The Crown", badge: "1799–1805" },
-        de: { title: "Kapitel 3: Ordnung, Recht & Kaiserkrone", badge: "1799–1805" },
+        sceneKey: "empire",
+        en: {
+          title: "Chapter 3: Order, Law & The Crown",
+          badge: "1799–1805",
+          intro: "Unified laws, centralized administration, and a new imperial crown in Paris—where authority was reshaped for an entire era."
+        },
+        de: {
+          title: "Kapitel 3: Ordnung, Recht & Kaiserkrone",
+          badge: "1799–1805",
+          intro: "Einheitliche Gesetze, straffe Verwaltung und eine neue Kaiserkrone in Paris – Macht und Ordnung werden für eine ganze Epoche neu geformt."
+        },
         steps: [
           {
             type: "choice",
@@ -217,18 +451,17 @@ const STORY_CAMPAIGNS = [
             }
           },
           {
-            type: "choice",
+            type: "graphic_pick",
+            graphicId: "coronation_crown",
+            correctKey: "crown_self",
             en: {
-              q: "What happened during the coronation ceremony in Notre-Dame regarding the crown?",
-              options: ["Napoleon placed the crown on his own head", "A foreign monarch placed it on him", "It was thrown into the Seine", "He refused any crown"],
-              storyInfo: "At Notre-Dame in December 1804, Napoleon took the crown and placed it on his own head before crowning Empress Joséphine—a powerful visual statement that his power came from his own rise and nation, not a foreign grant."
+              q: "Click the element in the graphic tied to Napoleon's 1804 coronation ceremony in Paris.",
+              storyInfo: "At Notre-Dame in December 1804, Napoleon took the crown and placed it on his own head before crowning Empress Joséphine—a powerful visual statement that his power came from his own rise and nation."
             },
             de: {
-              q: "Was geschah bei der Krönungszeremonie in Notre-Dame mit der Krone?",
-              options: ["Napoleon setzte sie sich selbst auf", "Ein fremder König setzte sie ihm auf", "Sie wurde in die Seine geworfen", "Er lehnte jede Krone ab"],
-              storyInfo: "Im Dezember 1804 in Notre-Dame nahm Napoleon die Krone selbst und setzte sie sich auf, bevor er Kaiserin Joséphine krönte – ein deutliches Zeichen, dass er seine Macht aus eigener Kraft und der Nation herleitete."
-            },
-            answer: 0
+              q: "Klicke in der Grafik auf das Symbol, das mit Napoleons Krönung 1804 in Paris verbunden ist.",
+              storyInfo: "Im Dezember 1804 in Notre-Dame nahm Napoleon die Krone selbst und setzte sie sich auf – ein deutliches Zeichen, dass er seine Macht aus eigener Kraft und der Nation herleitete."
+            }
           },
           {
             type: "choice",
@@ -268,8 +501,17 @@ const STORY_CAMPAIGNS = [
       {
         id: "nap_ch4",
         num: 4,
-        en: { title: "Chapter 4: Mastery Over Europe & Trade War", badge: "1805–1811" },
-        de: { title: "Kapitel 4: Vorherrschaft & Handelskrieg", badge: "1805–1811" },
+        sceneKey: "blockade",
+        en: {
+          title: "Chapter 4: Mastery Over Europe & Trade War",
+          badge: "1805–1811",
+          intro: "Continental dominance meets maritime rivalry—where trade bans, ports, and distant fronts test how far power can reach."
+        },
+        de: {
+          title: "Kapitel 4: Vorherrschaft & Handelskrieg",
+          badge: "1805–1811",
+          intro: "Vorherrschaft auf dem Festland trifft auf Rivalität zur See – Handelssperren, Häfen und neue Schauplätze stellen das Reich auf die Probe."
+        },
         steps: [
           {
             type: "choice",
@@ -357,8 +599,17 @@ const STORY_CAMPAIGNS = [
       {
         id: "nap_ch5",
         num: 5,
-        en: { title: "Chapter 5: The Long March East", badge: "1812" },
-        de: { title: "Kapitel 5: Der weite Marsch nach Osten", badge: "1812" },
+        sceneKey: "russia",
+        en: {
+          title: "Chapter 5: The Long March East",
+          badge: "1812",
+          intro: "Vast distances, long supply lines, and an approaching winter turn a massive eastern march into a historic turning point."
+        },
+        de: {
+          title: "Kapitel 5: Der weite Marsch nach Osten",
+          badge: "1812",
+          intro: "Riesige Entfernungen, lange Nachschubwege und ein nahender Winter machen den Marsch nach Osten zum historischen Wendepunkt."
+        },
         steps: [
           {
             type: "map",
@@ -402,18 +653,17 @@ const STORY_CAMPAIGNS = [
             answer: 0
           },
           {
-            type: "choice",
+            type: "graphic_pick",
+            graphicId: "moscow_retreat_route",
+            correctKey: "deep_winter_return",
             en: {
-              q: "Why did capturing the city not bring an immediate end to the war as Napoleon had hoped?",
-              options: ["No quick peace agreement followed and winter set in", "The city had gold roofs that weighed down wagons", "Russia surrendered the next morning", "The army sailed home by ship"],
-              storyInfo: "With much of the city devastated by fire, no peace offer coming, and winter approaching far from home, holding Moscow offered no lasting solution—forcing a retreat in October."
+              q: "Click the route phase on the graphic where harsh winter weather and scarce supplies hit hardest.",
+              storyInfo: "With much of Moscow devastated by fire, no quick peace deal emerging, and winter setting in along a depleted route, the return march in late 1812 became a severe ordeal."
             },
             de: {
-              q: "Warum brachte die Einnahme der Stadt nicht das erhoffte schnelle Kriegsende?",
-              options: ["Es kam zu keinem schnellen Frieden und der Winter setzte ein", "Die Stadt hatte keine Straßen", "Russland kapitulierte am selben Tag", "Das Heer fuhr per Schiff heim"],
-              storyInfo: "Da ein Friedensschluss ausblieb, große Teile der Stadt brannten und der Winter näher rückte, blieb in Moskau kein sicherer Halt – im Oktober begann der Rückzug."
-            },
-            answer: 0
+              q: "Klicke in der Grafik auf den Streckenabschnitt, auf dem Winterkälte und Versorgungsnot besonders hart trafen.",
+              storyInfo: "Ohne schnellen Friedensschluss, mit großen Zerstörungen und bei herannahendem Winter wurde der Rückmarsch Ende 1812 zu einer schweren Prüfung."
+            }
           },
           {
             type: "decision",
@@ -439,8 +689,17 @@ const STORY_CAMPAIGNS = [
       {
         id: "nap_ch6",
         num: 6,
-        en: { title: "Chapter 6: Return, Waterloo & Final Exile", badge: "1814–1821" },
-        de: { title: "Kapitel 6: Rückkehr, Waterloo & Verbannung", badge: "1814–1821" },
+        sceneKey: "endgame",
+        en: {
+          title: "Chapter 6: Return, Waterloo & Final Exile",
+          badge: "1814–1821",
+          intro: "Exile on Elba, a dramatic return for the Hundred Days, a decisive clash in 1815, and final exile across the ocean."
+        },
+        de: {
+          title: "Kapitel 6: Rückkehr, Waterloo & Verbannung",
+          badge: "1814–1821",
+          intro: "Elba, die überraschende Rückkehr der Hundert Tage, die Entscheidung 1815 und das ferne Exil über dem Ozean."
+        },
         steps: [
           {
             type: "choice",
@@ -457,15 +716,16 @@ const STORY_CAMPAIGNS = [
             answer: 0
           },
           {
-            type: "map",
-            targetId: "056",
+            type: "graphic_pick",
+            graphicId: "waterloo_endgame",
+            correctKey: "waterloo_point",
             en: {
-              q: "Click the country on the map south of Brussels where the decisive June 1815 battle took place.",
-              storyInfo: "Escaping Elba in early 1815, Napoleon returned to France for the 'Hundred Days'. In June 1815 his forces clashed with Allied armies near Waterloo in present-day Belgium."
+              q: "Click the location in the graphic marking the decisive June 1815 battle that ended the Hundred Days.",
+              storyInfo: "Returning from Elba in early 1815, Napoleon sparked the Hundred Days—only to face a decisive defeat at Waterloo in June 1815."
             },
             de: {
-              q: "Klicke auf der Karte das Land südlich von Brüssel an, in dem die Schlacht bei Waterloo stattfand.",
-              storyInfo: "Anfang 1815 verließ Napoleon Elba und kehrte für die 'Hundert Tage' nach Frankreich zurück. Im Juni 1815 kam es bei Waterloo im heutigen Belgien zur entscheidenden Schlacht."
+              q: "Klicke in der Grafik auf den Punkt, der im Juni 1815 das Ende der Hundert Tage markierte.",
+              storyInfo: "Nach der Rückkehr von Elba Anfang 1815 folgten die Hundert Tage – bis die Schlacht bei Waterloo im Juni 1815 die Wende brachte."
             }
           },
           {
@@ -538,6 +798,7 @@ const STORY_CAMPAIGNS = [
       {
         id: "rome_ch1",
         num: 1,
+        sceneKey: "italy_egypt",
         en: { title: "Chapter 1: Tiber, Seven Hills & Republic", badge: "753–264 BCE" },
         de: { title: "Kapitel 1: Tiber, Hügel & Republik", badge: "753–264 v. Chr." },
         steps: [
@@ -620,6 +881,7 @@ const STORY_CAMPAIGNS = [
       {
         id: "rome_ch2",
         num: 2,
+        sceneKey: "blockade",
         en: { title: "Chapter 2: Rivals Across the Sea", badge: "264–146 BCE" },
         de: { title: "Kapitel 2: Rivalen am Mittelmeer", badge: "264–146 v. Chr." },
         steps: [
@@ -709,6 +971,7 @@ const STORY_CAMPAIGNS = [
       {
         id: "rome_ch3",
         num: 3,
+        sceneKey: "corsica",
         en: { title: "Chapter 3: Civil Strife & Julius Caesar", badge: "133–44 BCE" },
         de: { title: "Kapitel 3: Bürgerkriege & Julius Caesar", badge: "133–44 v. Chr." },
         steps: [
@@ -791,6 +1054,7 @@ const STORY_CAMPAIGNS = [
       {
         id: "rome_ch4",
         num: 4,
+        sceneKey: "empire",
         en: { title: "Chapter 4: Augustus, Pax Romana & Empire", badge: "27 BCE–180 CE" },
         de: { title: "Kapitel 4: Augustus, Pax Romana & Kaiserzeit", badge: "27 v. Chr.–180 n. Chr." },
         steps: [
@@ -872,6 +1136,7 @@ const STORY_CAMPAIGNS = [
       {
         id: "rome_ch5",
         num: 5,
+        sceneKey: "endgame",
         en: { title: "Chapter 5: Frontiers, Division & Legacy", badge: "180–476 CE" },
         de: { title: "Kapitel 5: Grenzen, Teilung & Erbe", badge: "180–476 n. Chr." },
         steps: [
@@ -971,6 +1236,7 @@ const STORY_CAMPAIGNS = [
       {
         id: "exp_ch1",
         num: 1,
+        sceneKey: "italy_egypt",
         en: { title: "Chapter 1: Spice Routes & Atlantic Coasts", badge: "1415–1488" },
         de: { title: "Kapitel 1: Gewürzrouten & Atlantikküste", badge: "1415–1488" },
         steps: [
@@ -1053,6 +1319,7 @@ const STORY_CAMPAIGNS = [
       {
         id: "exp_ch2",
         num: 2,
+        sceneKey: "blockade",
         en: { title: "Chapter 2: Across the Atlantic", badge: "1492–1502" },
         de: { title: "Kapitel 2: Über den Atlantik", badge: "1492–1502" },
         steps: [
@@ -1135,6 +1402,7 @@ const STORY_CAMPAIGNS = [
       {
         id: "exp_ch3",
         num: 3,
+        sceneKey: "russia",
         en: { title: "Chapter 3: To India & Around the Globe", badge: "1497–1522" },
         de: { title: "Kapitel 3: Nach Indien & um die Welt", badge: "1497–1522" },
         steps: [
@@ -1217,6 +1485,7 @@ const STORY_CAMPAIGNS = [
       {
         id: "exp_ch4",
         num: 4,
+        sceneKey: "empire",
         en: { title: "Chapter 4: Cartography, Instruments & Trade", badge: "1500–1600" },
         de: { title: "Kapitel 4: Kartenkunst, Instrumente & Handel", badge: "1500–1600" },
         steps: [
@@ -1298,6 +1567,7 @@ const STORY_CAMPAIGNS = [
       {
         id: "exp_ch5",
         num: 5,
+        sceneKey: "endgame",
         en: { title: "Chapter 5: Global Links & Lasting Impact", badge: "1600+" },
         de: { title: "Kapitel 5: Weltweite Netze & Folgen", badge: "ab 1600" },
         steps: [
@@ -1389,7 +1659,7 @@ const STORY_CAMPAIGNS = [
 ];
 
 // -------------------------------------------------------------------------
-// 1. STORY-FORTSCHRITT PRO KAMPAGNE SPEICHERN & LADEN
+// 1. STORY-FORTSCHRITT SPEICHERN & LADEN
 // -------------------------------------------------------------------------
 function loadStoryProgress() {
   try {
@@ -1422,13 +1692,26 @@ function getAllStoryChapters() {
 }
 
 // -------------------------------------------------------------------------
-// 2. STYLES FÜR MULTI-KAMPAGNEN-HUB, ZEITSTRAHL & JAHRES-REGLER
+// 2. STYLES FÜR ARTWORK, ANIMATIONEN, GRAFIK-AUFGABEN & HUB
 // -------------------------------------------------------------------------
 function injectStoryStyles() {
   if (document.getElementById("bp-story-styles")) return;
   const style = document.createElement("style");
   style.id = "bp-story-styles";
   style.textContent = `
+    @keyframes bpFadeSlideUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes bpDashFlow {
+      to { stroke-dashoffset: -28; }
+    }
+    .story-fade-in {
+      animation: bpFadeSlideUp 0.42s ease both;
+    }
+    .story-dash-anim {
+      animation: bpDashFlow 2.2s linear infinite;
+    }
     .story-nav-btn {
       background: linear-gradient(135deg, rgba(250,204,21,0.16) 0%, rgba(56,189,248,0.16) 100%);
       border: 1.5px solid #facc15;
@@ -1450,6 +1733,7 @@ function injectStoryStyles() {
       border-radius: 20px;
       padding: 20px;
       margin-top: 12px;
+      animation: bpFadeSlideUp 0.3s ease both;
     }
     .story-campaign-grid {
       display: grid;
@@ -1504,12 +1788,70 @@ function injectStoryStyles() {
       border-color: #facc15;
       background: rgba(250, 204, 21, 0.12);
     }
+    .story-cinematic-banner {
+      position: relative;
+      border-radius: 16px;
+      overflow: hidden;
+      margin-bottom: 14px;
+      border: 1px solid rgba(56,189,248,0.35);
+      animation: bpFadeSlideUp 0.45s ease both;
+    }
+    .story-art-svg {
+      display: block;
+      width: 100%;
+      height: 165px;
+    }
+    .story-cinematic-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 14px 16px;
+      background: linear-gradient(180deg, rgba(15,23,42,0.08) 0%, rgba(15,23,42,0.88) 100%);
+    }
+    .story-cinematic-badge {
+      font-size: 0.72rem;
+      font-weight: 800;
+      color: #facc15;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .story-cinematic-title {
+      margin: 2px 0 0;
+      font-size: 1.08rem;
+      font-weight: 800;
+      color: #f8fafc;
+    }
+    .story-intro-reveal-box {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 16px;
+      margin-top: 10px;
+      animation: bpFadeSlideUp 0.45s ease both;
+    }
     .story-stage-box {
       background: #1e293b;
       border: 1.5px solid #334155;
       border-radius: 16px;
       padding: 16px;
       margin-top: 10px;
+      animation: bpFadeSlideUp 0.35s ease both;
+    }
+    .story-interactive-svg {
+      display: block;
+      width: 100%;
+      max-height: 190px;
+      border-radius: 14px;
+      border: 1px solid #334155;
+    }
+    .story-svg-hotspot {
+      cursor: pointer;
+      transition: transform 0.15s ease;
+    }
+    .story-svg-hotspot:hover {
+      filter: brightness(1.18);
     }
     .story-order-chip {
       display: flex;
@@ -1537,7 +1879,7 @@ function injectStoryStyles() {
 }
 
 // -------------------------------------------------------------------------
-// 3. EIGENEN "📖 STORY"-BUTTON EINFÜGEN (MIT ROBUSTEM FALLBACK)
+// 3. EIGENEN "📖 STORY"-BUTTON EINFÜGEN
 // -------------------------------------------------------------------------
 function renderStoryNavButton() {
   injectStoryStyles();
@@ -1585,7 +1927,7 @@ function renderStoryNavButton() {
 }
 
 // -------------------------------------------------------------------------
-// 4. EIGENE MULTI-KAMPAGNEN-LOBBY AUF DEM STARTBILDSCHIRM
+// 4. MULTI-KAMPAGNEN-LOBBY MIT NAPOLEON-ARTWORK-VORSCHAU
 // -------------------------------------------------------------------------
 function renderStoryHubPanel() {
   injectStoryStyles();
@@ -1631,6 +1973,7 @@ function renderStoryHubPanel() {
   }
   const campText = de ? campaign.de : campaign.en;
   const chosen = campaign.chapters[selectedStoryChapterIdx] || campaign.chapters[0];
+  const chosenInfo = de ? chosen.de : chosen.en;
   const doneCount = storyProgress.completedChapters.length;
   const totalCount = allCh.length;
 
@@ -1668,6 +2011,10 @@ function renderStoryHubPanel() {
     `;
   }).join("");
 
+  const previewArtwork = campaign.id === "napoleon"
+    ? buildNapoleonChapterArtwork(chosen.sceneKey || "corsica", chosenInfo.title, chosenInfo.badge)
+    : "";
+
   hub.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
       <div style="font-size:1.1rem;font-weight:800;color:#facc15;">
@@ -1691,14 +2038,16 @@ function renderStoryHubPanel() {
       <p style="margin:0;font-size:0.86rem;color:#cbd5e1;line-height:1.5;">${campText.subtitle}</p>
     </div>
 
+    ${previewArtwork}
+
     <div style="font-size:0.84rem;font-weight:800;color:#cbd5e1;">
-      ${de ? "2. Kapitel wählen (Story-Info erscheint jeweils nach deiner Antwort):" : "2. Choose Chapter (story info appears after each answer):"}
+      ${de ? "2. Kapitel wählen:" : "2. Choose Chapter:"}
     </div>
     <div class="story-chapter-grid">${chapterCardsHtml}</div>
 
     <div style="margin-top:18px;text-align:center;">
       <button type="button" class="primary-btn" style="padding:12px 26px;font-size:1rem;" onclick="startSelectedStoryChapter()">
-        ▶ ${de ? `Kapitel ${chosen.num} spielen` : `Play Chapter ${chosen.num}`}
+        ▶ ${de ? `Kapitel ${chosen.num} starten` : `Start Chapter ${chosen.num}`}
       </button>
     </div>
   `;
@@ -1712,10 +2061,20 @@ renderHome = function () {
 };
 
 // -------------------------------------------------------------------------
-// 5. STORY-KAPITEL STARTEN & AUSFÜHRLICHE STORY-INFO NACH DER ANTWORT
+// 5. KAPITEL-EINBLENDUNG (ARTWORK + SANFTER TEXT), GRAFIK-AUFGABEN & NEXT-CHAPTER
 // -------------------------------------------------------------------------
+let storyTypewriterTimer = null;
+
+function clearStoryTypewriter() {
+  if (storyTypewriterTimer) {
+    clearInterval(storyTypewriterTimer);
+    storyTypewriterTimer = null;
+  }
+}
+
 async function startSelectedStoryChapter() {
   injectStoryStyles();
+  clearStoryTypewriter();
   if (typeof stopTimer === "function") stopTimer();
   window.isDailySession = false;
   window.dailySeedValue = null;
@@ -1723,10 +2082,13 @@ async function startSelectedStoryChapter() {
 
   const campaign = STORY_CAMPAIGNS[selectedCampaignIdx] || STORY_CAMPAIGNS[0];
   const chapter = campaign.chapters[selectedStoryChapterIdx] || campaign.chapters[0];
+  const chInfo = currentLang === "de" ? chapter.de : chapter.en;
+
   activeStorySession = {
     campaign,
     chapter,
-    stepIdx: 0
+    stepIdx: 0,
+    phase: (campaign.id === "napoleon" && chInfo.intro) ? "chapter_intro" : "challenges"
   };
 
   activeQuestions = chapter.steps;
@@ -1750,24 +2112,51 @@ async function startSelectedStoryChapter() {
 }
 
 function clearStoryExtraUi() {
+  clearStoryTypewriter();
   const stage = document.getElementById("story-custom-stage");
   if (stage) stage.remove();
+  const intro = document.getElementById("story-chapter-intro-box");
+  if (intro) intro.remove();
+}
+
+function runSmoothTextReveal(el, fullText) {
+  clearStoryTypewriter();
+  if (!el) return;
+  el.textContent = "";
+  let i = 0;
+  storyTypewriterTimer = setInterval(() => {
+    i += 2;
+    el.textContent = fullText.slice(0, i);
+    if (i >= fullText.length) {
+      el.textContent = fullText;
+      clearStoryTypewriter();
+    }
+  }, 18);
+}
+
+function revealIntroTextImmediately(fullText) {
+  clearStoryTypewriter();
+  const target = document.getElementById("story-intro-animated-text");
+  if (target) target.textContent = fullText;
+}
+
+function enterNapoleonChapterChallenges() {
+  if (!activeStorySession) return;
+  clearStoryTypewriter();
+  activeStorySession.phase = "challenges";
+  activeStorySession.stepIdx = 0;
+  renderStoryStep();
 }
 
 function renderStoryStep() {
   if (!activeStorySession) return;
   injectStoryStyles();
+  clearStoryExtraUi();
 
   const de = currentLang === "de";
   const t = UI_STRINGS[currentLang];
-  const { campaign, chapter, stepIdx } = activeStorySession;
-  const step = chapter.steps[stepIdx];
+  const { campaign, chapter, stepIdx, phase } = activeStorySession;
   const chInfo = de ? chapter.de : chapter.en;
-  const stepInfo = de ? step.de : step.en;
-
-  currentIndex = stepIdx;
-  answered = false;
-  storyOrderSelection = [];
 
   ["hol-arena", "silhouette-box", "radar-hud", "chrono-arena", "flag-zoom-wrap", "dossier-arena", "missing-box", "flight-controls", "truesize-stage", "explorer-panel"].forEach(id => {
     const el = document.getElementById(id);
@@ -1778,13 +2167,46 @@ function renderStoryStep() {
   document.getElementById("options-list").innerHTML = "";
   document.getElementById("explanation-box").style.display = "none";
   document.getElementById("next-wrap").style.display = "none";
-  clearStoryExtraUi();
 
   document.getElementById("q-meta").textContent = `${campaign.icon} ${chInfo.title} • ${chInfo.badge}`;
-  document.getElementById("q-text").textContent = stepInfo.q;
-  document.getElementById("ui-q-counter").textContent = `${stepIdx + 1} / ${chapter.steps.length}`;
   document.getElementById("ui-score").textContent = t.pointsBadge(totalPoints);
   document.getElementById("ui-streak").textContent = `🔥 ${streak}`;
+
+  // Epische Kapitel-Einblendung mit Artwork und sanft auftauchendem Text
+  if (phase === "chapter_intro") {
+    document.getElementById("map-wrapper").classList.add("hidden");
+    document.getElementById("q-text").textContent = chInfo.title;
+    document.getElementById("ui-q-counter").textContent = de ? "Einblendung" : "Intro";
+    document.getElementById("progress-fill").style.width = "6%";
+
+    const introBox = document.createElement("div");
+    introBox.id = "story-chapter-intro-box";
+    introBox.className = "story-intro-reveal-box";
+    introBox.innerHTML = `
+      ${buildNapoleonChapterArtwork(chapter.sceneKey || "corsica", chInfo.title, chInfo.badge)}
+      <p id="story-intro-animated-text" style="margin:0;min-height:48px;line-height:1.62;color:#e2e8f0;font-size:0.96rem;"></p>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:16px;flex-wrap:wrap;">
+        <button type="button" class="pill-btn" onclick="revealIntroTextImmediately(${JSON.stringify(chInfo.intro)})">
+          ${de ? "Text sofort einblenden" : "Show Full Text"}
+        </button>
+        <button type="button" class="primary-btn" style="padding:10px 22px;" onclick="enterNapoleonChapterChallenges()">
+          ${de ? "In das Kapitel eintauchen →" : "Enter Chapter →"}
+        </button>
+      </div>
+    `;
+    document.getElementById("q-text").parentNode.insertBefore(introBox, document.getElementById("options-list"));
+    runSmoothTextReveal(document.getElementById("story-intro-animated-text"), chInfo.intro);
+    return;
+  }
+
+  const step = chapter.steps[stepIdx];
+  const stepInfo = de ? step.de : step.en;
+  currentIndex = stepIdx;
+  answered = false;
+  storyOrderSelection = [];
+
+  document.getElementById("q-text").textContent = stepInfo.q;
+  document.getElementById("ui-q-counter").textContent = `${stepIdx + 1} / ${chapter.steps.length}`;
   document.getElementById("progress-fill").style.width = `${(stepIdx / chapter.steps.length) * 100}%`;
 
   const mapWrapper = document.getElementById("map-wrapper");
@@ -1804,7 +2226,7 @@ function renderStoryStep() {
     stepInfo.options.forEach((optText, idx) => {
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "option-btn";
+      btn.className = "option-btn story-fade-in";
       btn.textContent = optText;
       btn.onclick = () => resolveStoryStep(idx === step.answer, optText);
       optList.appendChild(btn);
@@ -1817,7 +2239,9 @@ function renderStoryStep() {
   stage.className = "story-stage-box";
   document.getElementById("options-list").parentNode.insertBefore(stage, document.getElementById("options-list"));
 
-  if (step.type === "decision") {
+  if (step.type === "graphic_pick") {
+    stage.innerHTML = buildInteractiveGraphicSvg(step.graphicId, de);
+  } else if (step.type === "decision") {
     stepInfo.choices.forEach((choiceObj) => {
       const btn = document.createElement("button");
       btn.type = "button";
@@ -1852,6 +2276,17 @@ function renderStoryStep() {
     `;
     renderStoryOrderChips(stepInfo.items);
   }
+}
+
+function submitGraphicPick(pickedKey) {
+  if (answered || !activeStorySession) return;
+  const step = activeStorySession.chapter.steps[activeStorySession.stepIdx];
+  if (!step || step.type !== "graphic_pick") return;
+  const isCorrect = pickedKey === step.correctKey;
+  const detail = currentLang === "de"
+    ? (isCorrect ? "Treffer auf der Grafik!" : "Andere Stelle gewählt.")
+    : (isCorrect ? "Spot-on graphic pick!" : "Different spot selected.");
+  resolveStoryStep(isCorrect, detail);
 }
 
 function renderStoryOrderChips(items) {
@@ -1924,6 +2359,9 @@ function resolveStoryStep(isCorrect, detailText = "") {
   }
 
   document.querySelectorAll("#options-list .option-btn, #story-custom-stage .option-btn").forEach(b => { b.disabled = true; });
+  document.querySelectorAll("#story-custom-stage .story-svg-hotspot").forEach(el => {
+    el.style.pointerEvents = "none";
+  });
   const yearSlider = document.getElementById("story-year-range");
   if (yearSlider) yearSlider.disabled = true;
 
@@ -1943,6 +2381,7 @@ function resolveStoryStep(isCorrect, detailText = "") {
       <strong>${storyHeading}:</strong> ${stepInfo.storyInfo}
     </div>
   `;
+  expBox.classList.add("story-fade-in");
   expBox.style.display = "block";
 
   const isLastStep = stepIdx >= chapter.steps.length - 1;
@@ -1964,7 +2403,7 @@ function finishStoryChapter() {
   if (!activeStorySession) return;
   const de = currentLang === "de";
   const t = UI_STRINGS[currentLang];
-  const { chapter } = activeStorySession;
+  const { campaign, chapter } = activeStorySession;
   const chInfo = de ? chapter.de : chapter.en;
   const allCh = getAllStoryChapters();
 
@@ -1977,6 +2416,9 @@ function finishStoryChapter() {
   const prevBest = storyProgress.bestScores[chapter.id] || 0;
   if (totalPoints > prevBest) storyProgress.bestScores[chapter.id] = totalPoints;
   saveStoryProgress();
+
+  const nextChapterIdx = campaign.chapters.findIndex(c => c.id === chapter.id) + 1;
+  const hasNextChapter = nextChapterIdx > 0 && nextChapterIdx < campaign.chapters.length;
 
   clearStoryExtraUi();
   activeStorySession = null;
@@ -1995,7 +2437,25 @@ function finishStoryChapter() {
     ? "Dein Kapitel-Fortschritt und deine Münzen wurden gespeichert."
     : "Your chapter progress and coins have been saved.";
   document.getElementById("btn-share").textContent = t.shareBtn;
-  document.getElementById("btn-restart").textContent = t.restartBtn;
+
+  const restartBtn = document.getElementById("btn-restart");
+  if (hasNextChapter) {
+    const nextCh = campaign.chapters[nextChapterIdx];
+    restartBtn.textContent = de
+      ? `▶ Weiter zu Kapitel ${nextCh.num}`
+      : `▶ Next: Chapter ${nextCh.num}`;
+    restartBtn.onclick = () => {
+      selectedStoryChapterIdx = nextChapterIdx;
+      startSelectedStoryChapter();
+    };
+  } else {
+    restartBtn.textContent = t.restartBtn;
+    restartBtn.onclick = () => {
+      document.getElementById("screen-result").classList.add("hidden");
+      document.getElementById("screen-home").classList.remove("hidden");
+      renderHome();
+    };
+  }
 }
 
 // -------------------------------------------------------------------------
@@ -2003,7 +2463,7 @@ function finishStoryChapter() {
 // -------------------------------------------------------------------------
 const _storyOrigHandleMapGuess = handleMapGuess;
 handleMapGuess = function (clickedId, clickedFeature) {
-  if (activeStorySession) {
+  if (activeStorySession && activeStorySession.phase === "challenges") {
     if (answered) return;
     const step = activeStorySession.chapter.steps[activeStorySession.stepIdx];
     if (step && step.type === "map") {
