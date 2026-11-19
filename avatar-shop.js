@@ -701,7 +701,6 @@ function closeAvatarShopModal() {
   if (el) el.remove();
   renderAvatarHeaderWidget();
 }
-
 function setStudioField(key, value) {
   avatarProfile[key] = value;
   saveAvatarProfile();
@@ -709,21 +708,23 @@ function setStudioField(key, value) {
   renderAvatarHeaderWidget();
 }
 
-function saveOutfitPreset(slotIdx) {
-  avatarProfile.presets[slotIdx] = {
-    skin: avatarProfile.skin,
-    hairStyle: avatarProfile.hairStyle,
-    hairColor: avatarProfile.hairColor,
-    expression: avatarProfile.expression,
-    beard: avatarProfile.beard,
-    blush: avatarProfile.blush,
-    accentColor: avatarProfile.accentColor,
-    stageBg: avatarProfile.stageBg,
-    equipped: { ...avatarProfile.equipped }
-  };
+function handleCharacterNameInput(rawVal) {
+  const limited = String(rawVal || "").slice(0, 18);
+  avatarProfile.name = limited.trim() ? limited : "Explorer";
   saveAvatarProfile();
-  if (typeof playTone === "function") playTone(660, 0.1, "triangle", 0.1);
-  renderAvatarShopModalContent();
+  const nameTag = document.getElementById("studio-preview-name");
+  if (nameTag) nameTag.textContent = avatarProfile.name;
+  renderAvatarHeaderWidget();
+}
+
+function finalizeCharacterName(inputEl) {
+  const cleaned = String(inputEl.value || "").trim().slice(0, 18) || "Explorer";
+  avatarProfile.name = cleaned;
+  inputEl.value = cleaned;
+  saveAvatarProfile();
+  const nameTag = document.getElementById("studio-preview-name");
+  if (nameTag) nameTag.textContent = cleaned;
+  renderAvatarHeaderWidget();
 }
 
 function loadOutfitPreset(slotIdx) {
@@ -774,18 +775,19 @@ function renderAvatarShopModalContent() {
 
   const stageObj = STAGE_BACKGROUNDS.find(s => s.id === avatarProfile.stageBg) || STAGE_BACKGROUNDS[0];
 
-  const previewBanner = `
+const previewBanner = `
     <div style="display:flex;gap:16px;align-items:center;background:#1e293b;padding:12px 14px;border-radius:16px;border:1px solid #334155;flex-wrap:wrap;">
       <div class="studio-stage-box" style="background:${stageObj.css};">
         ${buildAvatarSVG(avatarProfile, 82)}
-        <span style="font-size:0.72rem;font-weight:800;color:#f8fafc;margin-top:4px;text-shadow:0 1px 4px rgba(0,0,0,0.8);">${escapeHtmlSimple(avatarProfile.name)}</span>
+        <span id="studio-preview-name" style="font-size:0.72rem;font-weight:800;color:#f8fafc;margin-top:4px;text-shadow:0 1px 4px rgba(0,0,0,0.8);">${escapeHtmlSimple(avatarProfile.name)}</span>
       </div>
       <div style="flex:1;min-width:210px;">
         <label style="font-size:0.76rem;color:#94a3b8;font-weight:700;display:block;margin-bottom:4px;">
           ${de ? "Charakter-Name:" : "Character Name:"}
         </label>
         <input type="text" maxlength="18" value="${escapeHtmlSimple(avatarProfile.name)}"
-          oninput="setStudioField('name', String(this.value || '').trim().slice(0,18) || 'Explorer')"
+          oninput="handleCharacterNameInput(this.value)"
+          onblur="finalizeCharacterName(this)"
           style="background:#0f172a;border:1px solid #475569;color:#f8fafc;padding:7px 11px;border-radius:10px;font-weight:700;width:100%;max-width:230px;">
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
           ${STAGE_BACKGROUNDS.map(bg => `
@@ -797,7 +799,6 @@ function renderAvatarShopModalContent() {
       </div>
     </div>
   `;
-
   let bodyHtml = previewBanner;
 
   if (activeAvatarModalTab === "studio") {

@@ -551,6 +551,8 @@ const UI_STRINGS = {
       privacyBody: `
         <p><strong>1. General Information</strong><br>This quiz website runs directly in your browser. We do not require user accounts or store personal profiles on external servers.</p>
         <p><strong>2. External Content (Maps & Flag Images)</strong><br>Flag images are loaded via FlagCDN (flagcdn.com) and world map vector data via jsDelivr (cdn.jsdelivr.net). Technically, your IP address is transmitted to deliver these files.</p>
+        <h4>3. Advertising (Google AdSense)</h4>
+<p>This website uses Google AdSense, an advertising service provided by Google Ireland Limited. Google uses cookies and similar technologies to display relevant ads and measure ad performance. Personalized ads are only loaded after your explicit consent via our cookie banner.</p>
       `
     }
   },
