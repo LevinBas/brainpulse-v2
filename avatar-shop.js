@@ -197,14 +197,19 @@ const DEFAULT_PROFILE_DATA = {
   }
 };
 
+const AVATAR_STORAGE_KEY = "brainpulse_avatar_profile_v1";
+
 function loadAvatarProfile() {
   try {
-    const raw = localStorage.getItem("brainpulse_avatar_profile_v1");
+    const raw = window.localStorage.getItem(AVATAR_STORAGE_KEY);
     if (!raw) return JSON.parse(JSON.stringify(DEFAULT_PROFILE_DATA));
     const parsed = JSON.parse(raw);
     return {
       ...DEFAULT_PROFILE_DATA,
       ...parsed,
+      name: (parsed.name && String(parsed.name).trim()) ? String(parsed.name).trim() : DEFAULT_PROFILE_DATA.name,
+      coins: typeof parsed.coins === "number" ? parsed.coins : DEFAULT_PROFILE_DATA.coins,
+      lifetimeCoins: typeof parsed.lifetimeCoins === "number" ? parsed.lifetimeCoins : DEFAULT_PROFILE_DATA.lifetimeCoins,
       equipped: { ...DEFAULT_PROFILE_DATA.equipped, ...(parsed.equipped || {}) },
       presets: Array.isArray(parsed.presets) ? parsed.presets.slice(0, 3) : [null, null, null],
       stats: { ...DEFAULT_PROFILE_DATA.stats, ...(parsed.stats || {}) }
@@ -220,10 +225,13 @@ let activeShopCategory = "hat";
 
 function saveAvatarProfile() {
   try {
-    localStorage.setItem("brainpulse_avatar_profile_v1", JSON.stringify(avatarProfile));
-  } catch (e) {}
+    window.localStorage.setItem(AVATAR_STORAGE_KEY, JSON.stringify(avatarProfile));
+  } catch (e) {
+    console.warn("Speichern im Browser nicht möglich:", e);
+  }
 }
 
+window.addEventListener("beforeunload", saveAvatarProfile);
 // -------------------------------------------------------------------------
 // 1. ERWEITERTER SVG-CHARAKTER-GENERATOR (HAARE, MIMIK, BART, OUTFIT, EXTRAS)
 // -------------------------------------------------------------------------
