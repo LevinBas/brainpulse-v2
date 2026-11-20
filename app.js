@@ -3170,7 +3170,7 @@ async function startDailyChallenge() {
   document.getElementById("screen-result").classList.add("hidden");
   document.getElementById("screen-quiz").classList.remove("hidden");
 
-  await ensureWorldDataLoaded();
+  await ensureMapLoaded();
   activeQuestions = buildDailySeedQuestions(seedStr);
   renderQuestion(false);
 }
@@ -3195,7 +3195,7 @@ async function startWeaknessTraining() {
   document.getElementById("screen-result").classList.add("hidden");
   document.getElementById("screen-quiz").classList.remove("hidden");
 
-  await ensureWorldDataLoaded();
+  await ensureMapLoaded();
   activeQuestions = weakQuestions;
   renderQuestion(false);
 }
