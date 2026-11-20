@@ -3270,16 +3270,23 @@ function injectBlindMapStyles() {
   style.id = "blind-map-styles";
   style.textContent = `
     #world-map.blind-mode .country-path:not(.correct):not(.wrong) {
-      stroke: #334155 !important;
+      fill: #1e293b !important;
+      stroke: #1e293b !important;
+      stroke-width: 1.2px !important;
+      stroke-linejoin: round !important;
     }
     #world-map.blind-mode .country-path:not(.correct):not(.wrong):hover {
-      fill: #334155 !important;
+      fill: #1e293b !important;
+      stroke: #1e293b !important;
     }
-    #world-map.pinpoint-mode .country-path {
+    #world-map.pinpoint-mode:not(.blind-mode) .country-path {
       cursor: crosshair !important;
     }
-    #world-map.pinpoint-mode .country-path:hover {
+    #world-map.pinpoint-mode:not(.blind-mode) .country-path:hover {
       fill: #3b4c66 !important;
+    }
+    #world-map.pinpoint-mode.blind-mode .country-path {
+      cursor: crosshair !important;
     }
     .country-path.border-start {
       fill: #3b82f6 !important;
